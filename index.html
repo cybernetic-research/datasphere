@@ -458,7 +458,25 @@
   const polyMain = new THREE.LineBasicMaterial({ color: 0xb18cff, transparent: true, opacity: 0.95 });
   const polyFaint = new THREE.LineBasicMaterial({ color: 0xb18cff, transparent: true, opacity: 0.22 });
   const polyLane = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: ADD });
-  let polyLines = null, polyRings = null, polyHi = null;
+  let polyLines = null, polyRings = null, polyHi = null, polyHex = null;
+  // the walls: The Lawnmower Man's mainframe (2:06:52-2:10:56), a honeycomb of bevelled blue cells with red and pink ones scattered through it,
+  // drifting toward the core
+  const hexMat = new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { uTime: U.uTime, uFogColor: U.uFogColor, uFogDensity: U.uFogDensity, uFlow: { value: 0.6 } },
+    vertexShader: `varying vec2 vUv; varying vec3 vW; void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uTime; uniform vec3 uFogColor; uniform float uFogDensity; uniform float uFlow; varying vec2 vUv; varying vec3 vW;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main(){
+        vec2 uv = vUv + vec2(0.0, uTime * uFlow); const vec2 S = vec2(1.0, 1.7320508);
+        vec4 hc = floor(vec4(uv, uv - vec2(0.5, 1.0)) / S.xyxy) + 0.5; vec4 hp = vec4(uv - hc.xy * S, uv - (hc.zw + 0.5) * S);
+        vec4 c = dot(hp.xy, hp.xy) < dot(hp.zw, hp.zw) ? vec4(hp.xy, hc.xy) : vec4(hp.zw, hc.zw + 9.73);
+        vec2 q = abs(c.xy); float d = max(dot(q, vec2(0.5, 0.8660254)), q.x);
+        float r = h(c.zw + floor(uTime * 0.25 + h(c.zw) * 4.0) * 0.17);
+        vec3 base = r < 0.1 ? vec3(0.95, 0.12, 0.32) : r < 0.16 ? vec3(0.95, 0.45, 0.62) : vec3(0.22, 0.24, 0.95) * (0.75 + 0.5 * h(c.zw + 3.1));
+        float bevel = 0.75 + 0.6 * clamp(0.5 - c.y * 1.1 - c.x * 0.4, 0.0, 1.0);
+        vec3 col = mix(vec3(0.03, 0.02, 0.14), base * bevel, smoothstep(0.44, 0.40, d));
+        col += vec3(0.5, 0.55, 1.0) * smoothstep(0.40, 0.36, d) * smoothstep(0.30, 0.38, d) * 0.25;
+        float fd = length(vW - cameraPosition); col = mix(col, uFogColor, 1.0 - exp(-uFogDensity * uFogDensity * fd * fd));
+        gl_FragColor = vec4(col, 1.0); }` });
   const POLY_L = 100, POLY_N = 16, POLY_C = { x: 0, y: 6 };
   const SHAPES = [
     (k) => { const a = -Math.PI / 2 + (k / POLY_N) * TAU; return [Math.cos(a) * 6, Math.sin(a) * 6]; },
@@ -476,7 +494,17 @@
       main.push(a.x, a.y, 0, a.x, a.y, -POLY_L, a.x, a.y, 0, b.x, b.y, 0, a.x, a.y, -POLY_L, b.x, b.y, -POLY_L);
       for (let z = 10; z < POLY_L; z += 10) rings.push(a.x, a.y, -z, b.x, b.y, -z);
     }
-    for (const o of [polyLines, polyRings]) if (o) { polyGroup.remove(o); o.geometry.dispose(); }
+    for (const o of [polyLines, polyRings, polyHex]) if (o) { polyGroup.remove(o); o.geometry.dispose(); }
+    { // the honeycomb skin, one strip per lane, cells about a metre across
+      const pos = [], uvs = [], H = 1.05; let arc = 0;
+      for (let k = 0; k < POLY_N; k++) {
+        const a = polyPts[k], b = polyPts[(k + 1) % POLY_N], len = Math.hypot(b.x - a.x, b.y - a.y), u0 = arc / H, u1 = (arc + len) / H, v1 = POLY_L / H; arc += len;
+        pos.push(a.x, a.y, 0, b.x, b.y, 0, b.x, b.y, -POLY_L, a.x, a.y, 0, b.x, b.y, -POLY_L, a.x, a.y, -POLY_L);
+        uvs.push(u0, 0, u1, 0, u1, v1, u0, 0, u1, v1, u0, v1);
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      polyHex = new THREE.Mesh(g, hexMat); polyHex.renderOrder = -1; polyGroup.add(polyHex);
+    }
     const g1 = new THREE.BufferGeometry(); g1.setAttribute("position", new THREE.Float32BufferAttribute(main, 3));
     const g2 = new THREE.BufferGeometry(); g2.setAttribute("position", new THREE.Float32BufferAttribute(rings, 3));
     polyLines = new THREE.LineSegments(g1, polyMain); polyRings = new THREE.LineSegments(g2, polyFaint);
@@ -1532,17 +1560,30 @@
   const spiralPts = []; for (let i = 0; i <= 80; i++) { const a = i * 0.32, r = 0.05 + i * 0.013; spiralPts.push(new V3(Math.cos(a) * r, Math.sin(a) * r, 0)); }
   const spiralGeo = new THREE.BufferGeometry().setFromPoints(spiralPts);
   const diaGeo = new THREE.OctahedronGeometry(0.8, 0); diaGeo.scale(1, 1, 0.35);
-  const PV_FILLS = [pvFill(0xff2a7a), pvFill(0xffe04a), pvFill(0x5dffb0)];
+  const PV_FILLS = [pvFill(0xff2a7a), pvFill(0xffe04a), pvFill(0xe8b81c)];
+  function crystalGeo(r) { // a data crystal: every facet its own colour, as in the film
+    const g = new THREE.IcosahedronGeometry(r, 0), n = g.attributes.position.count, col = [], P = [[1, 0.15, 0.2], [0.2, 0.9, 0.3], [1, 0.85, 0.15], [0.25, 0.4, 1], [0.95, 0.4, 0.9], [1, 0.55, 0.1]];
+    for (let i = 0; i < n; i += 3) { const c = P[(Math.random() * P.length) | 0]; for (let j = 0; j < 3; j++) col.push(...c); }
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); return g;
+  }
+  const crystalMat = new THREE.MeshBasicMaterial({ vertexColors: true }), crystalEdge = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+  const hexTubeGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.9, 6, 1, true); hexTubeGeo.rotateZ(Math.PI / 2);
+  const hexTubeFill = new THREE.MeshBasicMaterial({ color: 0xb8c4ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }), hexTubeEdge = new THREE.LineBasicMaterial({ color: 0xf0f4ff });
+  const crystal = (r) => { const g = crystalGeo(r), m = new THREE.Mesh(g, crystalMat); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), crystalEdge)); return m; };
   const pve = Array.from({ length: 36 }, () => {
     const g = new THREE.Group(); g.visible = false; polyGroup.add(g);
-    const bow = new THREE.Group(); bow.add(new THREE.Mesh(bowGeo, PV_FILLS[0]), new THREE.LineSegments(new THREE.EdgesGeometry(bowGeo), pvEdge(0xff7ab0)));
-    const eye = new THREE.Group(); eye.add(new THREE.Mesh(new THREE.CircleGeometry(1, 20), PV_FILLS[1]), new THREE.Line(spiralGeo, pvEdge(0xfff2a0)));
-    const dia = new THREE.Group(); dia.add(new THREE.Mesh(diaGeo, PV_FILLS[2]), new THREE.LineSegments(new THREE.EdgesGeometry(diaGeo), pvEdge(0xb0ffd8)));
-    g.add(bow, eye, dia); return { on: false, g, v: [bow, eye, dia] };
+    const c0 = crystal(0.42), c1 = crystal(0.85);
+    const bow = new THREE.Group(); bow.add(new THREE.Mesh(hexTubeGeo, hexTubeFill), new THREE.LineSegments(new THREE.EdgesGeometry(hexTubeGeo), hexTubeEdge), c0); // a hex tube with a crystal in it
+    const eye = new THREE.Group(); eye.add(c1); // a loose crystal, spinning
+    const dia = new THREE.Group(); dia.add(new THREE.Mesh(diaGeo, PV_FILLS[2]), new THREE.LineSegments(new THREE.EdgesGeometry(diaGeo), pvEdge(0xfff0b0))); // gold splitters
+    g.add(bow, eye, dia); return { on: false, g, v: [bow, eye, dia], cr: [c0, c1] };
   });
   const pvCore = new THREE.Group(); pvCore.visible = false; polyGroup.add(pvCore);
-  for (let k = 0; k < 3; k++) { const l = new THREE.Line(spiralGeo, pvEdge([0xb18cff, 0xff47d4, 0x35e6ff][k])); l.scale.setScalar(5.5 - k * 1.2); l.rotation.z = k * 2; pvCore.add(l); }
-  pvCore.add(new THREE.Mesh(new THREE.CircleGeometry(1.2, 24), new THREE.MeshBasicMaterial({ color: 0xffffff })));
+  { // the core: a great hexagonal cell with the mainframe's crystal turning inside it
+    const hg = new THREE.CylinderGeometry(3.4, 3.4, 5, 6, 1, true); hg.rotateX(Math.PI / 2);
+    const cell = new THREE.Group(); cell.add(new THREE.Mesh(hg, hexTubeFill), new THREE.LineSegments(new THREE.EdgesGeometry(hg), hexTubeEdge)); pvCore.add(cell);
+    pvCore.add(crystal(2)); pvCore.add(crystal(1.2));
+  }
   pvCore.position.set(POLY_C.x, POLY_C.y, -POLY_L + 1);
   const pb = Array.from({ length: 30 }, () => ({ on: false, u: 0, d: 0 }));        // player lane shots
   const pbe = Array.from({ length: 30 }, () => ({ on: false, u: 0, d: 0 }));       // enemy lane shots
@@ -2333,7 +2374,7 @@
     paranoid: { fog: 0x05080a, dens: 0.0068, a: 0x2fdc6a, b: 0xd8e0e8, world: true },
     tunnel: { fog: 0x020818, dens: 0.011, a: 0x6aa8ff, b: 0x35e6ff, world: false },
     cage: { fog: 0x12020a, dens: 0.012, a: 0xff2a3a, b: 0x3a0010, world: false },
-    poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
+    poly: { fog: 0x05041a, dens: 0.0085, a: 0x3a3cf2, b: 0xf2205a, world: false },
     uplink: { fog: 0x1c0c03, dens: 0.03, a: 0xffa040, b: 0xd06010, world: false },
     battle: { fog: 0x3a1a08, dens: 0.0085, a: 0x2f8f4a, b: 0x9fff9a, world: false },
     ld: { fog: 0x02040e, dens: 0.004, a: 0x35e6ff, b: 0x7a5cff, world: false },
@@ -3888,9 +3929,9 @@
         finishConstruct(t, false);
         keyLight.position.set(cx * 0.8, cy + 1, 3);
         // colours drift slowly (no strobing)
-        const hue = (0.72 + t * 0.02 + R.wave * 0.13) % 1;
-        polyMain.color.setHSL(hue, 0.9, 0.62); polyFaint.color.setHSL((hue + 0.1) % 1, 0.8, 0.5);
-        runScene.fog.color.setHSL(hue, 0.6, 0.02);
+        const hue = 0.64 + 0.04 * Math.sin(t * 0.3 + R.wave); // the film's blues, with the lines a shade lighter than the cells
+        polyMain.color.setHSL(hue, 0.9, 0.78); polyFaint.color.setHSL(hue, 0.8, 0.6);
+        runScene.fog.color.setHSL(0.67, 0.8, 0.05); hexMat.uniforms.uFlow.value = R.stage === "core" ? 1.4 : 0.6;
         // highlight the current lane
         const k = Math.floor(R.u) % POLY_N, pa = polyPts[k], pbp = polyPts[(k + 1) % POLY_N], hp = polyHi.geometry.attributes.position;
         hp.array.set([pa.x, pa.y, 0, pa.x, pa.y, -POLY_L, pbp.x, pbp.y, 0, pbp.x, pbp.y, -POLY_L]); hp.needsUpdate = true;
@@ -3925,6 +3966,7 @@
           }
           polyPos(e.u, PATH); e.g.position.set(PATH.x, PATH.y, -e.d * POLY_L);
           polyPos(e.u + 0.01, tmpV2); e.g.rotation.set(0, 0, Math.atan2(tmpV2.y - PATH.y, tmpV2.x - PATH.x) + (e.type === 1 ? t * 3 : 0));
+          e.cr[0].rotation.set(t * 2.1, t * 1.3, 0); e.cr[1].rotation.set(t * 1.2, t * 1.7, 0);
           e.g.scale.setScalar(e.type === 1 ? 1.1 : 1.2);
         }
         // lane shots
