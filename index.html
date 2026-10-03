@@ -801,6 +801,17 @@
   const bunkerDoor = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 0.3), doorMat);
   const doorEdge = new THREE.LineSegments(new THREE.EdgesGeometry(bunkerDoor.geometry), new THREE.LineBasicMaterial({ color: 0xff3a5c }));
   bunkerDoor.add(doorEdge); bunkerDoor.position.set(0, 1.5, BT.bz - 0.4); battle.add(bunkerDoor);
+  // the door's keypad shows the code digits you've found
+  const keypad = (() => {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 192; const tex = new THREE.CanvasTexture(c);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.9), new THREE.MeshBasicMaterial({ map: tex, transparent: true })); m.position.set(0, 0.55, 0.16); bunkerDoor.add(m);
+    return { draw(code, got) {
+      const g = c.getContext("2d"); g.clearRect(0, 0, 512, 192); g.fillStyle = "rgba(20,0,30,0.85)"; g.fillRect(0, 0, 512, 192);
+      g.strokeStyle = "#d04dff"; g.lineWidth = 6; g.strokeRect(3, 3, 506, 186); g.textAlign = "center"; g.font = `112px ${FONT}`;
+      code.forEach((d, i) => { g.fillStyle = got[i] ? "#f2b8ff" : "rgba(208,77,255,0.35)"; g.shadowColor = "#d04dff"; g.shadowBlur = got[i] ? 24 : 0; g.fillText(got[i] ? String(d) : "_", 82 + i * 116, 136); });
+      tex.needsUpdate = true;
+    } };
+  })();
   const termScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ color: 0x35e6ff })); termScreen.position.set(0, 1.6, BT.bz - 8.5); termScreen.rotation.x = -0.3; battle.add(termScreen);
   const jackPort = makePortal(0x35e6ff, 1.5); jackPort.position.set(0, 2.4, BT.bz - BT.bd + 0.2);
   // threats: soldiers popping up in trenches, machine-gun nests, a tank
@@ -871,7 +882,7 @@
   function mineSet(M, mesh, dy, show) { dummy.position.set(M.x, M.y + dy, M.z); dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(show ? 1 : 0); dummy.updateMatrix(); mesh.setMatrixAt(M.i, dummy.matrix); mesh.instanceMatrix.needsUpdate = true; dummy.scale.setScalar(1); }
   function mineShow(M) { mineSet(M, mineDiscs, 0, M.on); mineSet(M, mineLeds, 0.1, M.on); mineSet(M, mineRings, 0.12, M.on && M.ring); }
   // power-ups: a beam of light marks each one from a distance
-  const PU = { repair: { col: 0x5dffb0, label: "REPAIR", sub: "+50% integrity" }, shield: { col: 0x35e6ff, label: "SHIELD", sub: "8 seconds untouchable" }, god: { col: 0xffc24a, label: "GOD CHARGE", sub: "god meter full · G / B to unleash" }, jack: { col: 0xff47d4, label: "SPARE JACK", sub: "+1 neural jack" } };
+  const PU = { repair: { col: 0x5dffb0, label: "REPAIR", sub: "+50% integrity" }, shield: { col: 0x35e6ff, label: "SHIELD", sub: "8 seconds untouchable" }, god: { col: 0xffc24a, label: "GOD CHARGE", sub: "god meter full · G / B to unleash" }, jack: { col: 0xffffff, label: "SPARE JACK", sub: "+1 neural jack" } };
   const powerUps = [];
   {
     const kinds = ["repair", "repair", "repair", "repair", "repair", "repair", "shield", "shield", "shield", "god", "god", "god", "jack", "jack"];
@@ -883,6 +894,22 @@
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 16, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.3, blending: ADD, depthWrite: false })); beam.position.y = 8; g.add(beam);
       g.position.set(x, terrain(x, z) + 1.1, z); battle.add(g); powerUps.push({ kind, g, core, ring, x, z, on: true });
     });
+  }
+  // the bunker code: four digits scattered off the main path, in a violet nothing else on the battlefield uses
+  const KEY_COL = 0xd04dff, keyBeamMat = new THREE.MeshBasicMaterial({ color: KEY_COL, transparent: true, opacity: 0.45, blending: ADD, depthWrite: false });
+  const keyDigits = [0, 1, 2, 3].map((i) => {
+    let z, x; do { z = lerp(-60, BT.bz + 60, (i + rand(0.15, 0.85)) / 4); x = (Math.random() < 0.5 ? -1 : 1) * rand(7, BT.hw - 2); } while (BT.trenches.some((tz) => Math.abs(z - tz) < BT.tw + 3));
+    const g = new THREE.Group(), c = document.createElement("canvas"); c.width = c.height = 128; const tex = new THREE.CanvasTexture(c);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+    const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.05, 0)), new THREE.LineBasicMaterial({ color: KEY_COL }));
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 40, 6, 1, true), keyBeamMat); beam.position.y = 20;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.4, 28), new THREE.MeshBasicMaterial({ color: KEY_COL, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = -1.45;
+    g.add(face, frame, beam, ring); const y = terrain(x, z) + 1.6; g.position.set(x, y, z); battle.add(g);
+    return { i, x, z, y, g, face, frame, c, tex, d: 0, on: true };
+  });
+  function drawKeyDigit(K) {
+    const g = K.c.getContext("2d"); g.clearRect(0, 0, 128, 128); g.textAlign = "center"; g.textBaseline = "middle"; g.font = `104px ${FONT}`;
+    g.fillStyle = "#f2b8ff"; g.shadowColor = "#d04dff"; g.shadowBlur = 18; g.fillText(String(K.d), 64, 70); K.tex.needsUpdate = true;
   }
   // the odd Space Paranoid crossing overhead, dropping bombs; a ring marks where each one will land
   const btShips = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
@@ -2093,6 +2120,8 @@
         mortars.forEach((m) => { m.on = false; m.m.visible = false; });
         mines.forEach((M) => { M.on = true; M.ring = false; mineShow(M); });
         powerUps.forEach((P) => { P.on = true; P.g.visible = true; });
+        R.code = keyDigits.map(() => (Math.random() * 10) | 0); R.got = [false, false, false, false]; R.hunt = false; keyBeamMat.fog = true; keyBeamMat.needsUpdate = true;
+        keyDigits.forEach((K, i) => { K.on = true; K.g.visible = true; K.d = R.code[i]; drawKeyDigit(K); }); keypad.draw(R.code, R.got);
         btShips.forEach((S2) => { S2.on = false; S2.g.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
         flares.forEach((f, i) => f.position.set(rand(-25, 25), 20 + i * 9, rand(-30, -90)));
         bunkerDoor.position.y = 1.5; doorEdge.material.color.set(0xff3a5c); jackPort.visible = true;
@@ -2102,8 +2131,9 @@
       },
       cover: coverAt,
       objective() {
-        const left = threats.filter((T) => T.on && T.st !== "wait").length, guard = threats.filter((T) => T.on && T.guard).length, d = Math.max(0, Math.round(A.z - BT.bz)), prog = 1 - d / -BT.bz;
-        if (R.stage === "advance") return { label: `Threats ${left}`, text: guard && d < 100 ? `Bunker sealed · take out the guard · ${guard} left` : `Reach the bunker · ${d} m`, prog };
+        const left = threats.filter((T) => T.on && T.st !== "wait").length, d = Math.max(0, Math.round(A.z - BT.bz)), prog = 1 - d / -BT.bz;
+        const code = R.code.map((c, i) => (R.got[i] ? c : "_")).join(" "), have = R.got.filter(Boolean).length;
+        if (R.stage === "advance") return { label: `Threats ${left} · door code ${code}`, text: have < 4 ? (R.hunt ? `Find the missing code digits · follow the violet beams · ${have} / 4` : `Find the 4 code digits · reach the bunker · ${d} m`) : `Code complete · reach the bunker · ${d} m`, prog };
         if (R.stage === "open") return { label: `Threats ${left}`, text: "Bunker open · get inside and jack in", prog };
         return { label: "Bunker", text: "Jacking in…", prog: 1 };
       },
@@ -2211,7 +2241,24 @@
           T.g.scale.setScalar(1 + T.flash * 0.08);
           if (T.kind !== "soldier" || T.up > 0.5) addT(cx, cy, T.z, cr, false, (d) => { T.hp -= d; T.flash = 1; if (T.hp <= 0) L.kill(T, cx, cy); else burst(cx, cy, T.z, C_RED, 6); });
         }
-        if (R.stage === "advance" && guardLeft === 0) { R.stage = "open"; Sound.chime(); showMsg("BUNKER UNSEALED", "get inside and jack in", COL.cyan, 2.6); doorEdge.material.color.set(0x35e6ff); }
+        const camW = btV2.setFromMatrixPosition(camera.matrixWorld);
+        // code digits: pick them up; the door only opens with all four
+        for (const K of keyDigits) {
+          if (!K.on) continue;
+          K.g.visible = R.hunt || Math.abs(A.z - K.z) < 220; if (!K.g.visible) continue;
+          K.face.lookAt(camW.x, K.y, camW.z); K.frame.rotation.y += dt * 1.2; K.frame.rotation.x = Math.sin(t * 0.8 + K.i) * 0.3; K.g.position.y = K.y + Math.sin(t * 1.7 + K.i) * 0.15;
+          if (live && !jack && Math.hypot(A.x - K.x, A.z - K.z) < 1.9 && Math.abs(A.y - K.y) < 3) {
+            K.on = false; K.g.visible = false; R.got[K.i] = true; keypad.draw(R.code, R.got);
+            const have = R.got.filter(Boolean).length, code = R.code.map((c, i) => (R.got[i] ? c : "_")).join(" ");
+            burst(K.x, K.y, K.z, new C3(KEY_COL), 70); Sound.chime(); showMsg(have < 4 ? `CODE DIGIT ${K.d}` : "CODE COMPLETE", have < 4 ? `door code ${code} · ${4 - have} to find` : `${code} · the bunker door will open`, "#d04dff", 2.4);
+          }
+        }
+        const have = R.got.filter(Boolean).length;
+        if (R.stage === "advance" && have === 4 && A.z < BT.bz + 60) { R.stage = "open"; Sound.chime(); showMsg("CODE ACCEPTED", "the bunker door is open · get inside and jack in", COL.cyan, 2.6); doorEdge.material.color.set(0x35e6ff); }
+        if (R.stage === "advance" && have < 4 && A.z < BT.bz + 14 && !R.hunt) { // at the door without the code: the beams show through the fog so you can go back for them
+          R.hunt = true; keyBeamMat.fog = false; keyBeamMat.needsUpdate = true; Sound.buzz();
+          showMsg("DOOR LOCKED", `missing ${4 - have} code digit${4 - have === 1 ? "" : "s"} · follow the violet beams`, "#d04dff", 3.5);
+        }
         if (R.stage !== "advance") bunkerDoor.position.y = Math.min(4.6, bunkerDoor.position.y + dt * 1.5);
         // mines: the HUD rings any within 9 m; step on one (feet on the ground) and it takes a whole jack
         mineLed.opacity = Math.sin(t * 5) > 0.5 ? 1 : 0.25; mineRingMat.opacity = 0.45 + 0.4 * Math.sin(t * 9);
@@ -2300,7 +2347,6 @@
         btGroundMat.uniforms.uRed.value = R.red;
         updatePackets(dt, t, false);
         // HUD: brackets on every threat in range, waypoint over the bunker
-        const camW = btV2.setFromMatrixPosition(camera.matrixWorld);
         const e = camera.matrixWorld.elements; let nb = 0; // brackets face the camera: corners along its right and up vectors
         threats.forEach((T, i) => {
           if (!(T.on && T.st !== "wait" && live && !R.over && !jack && Math.abs(A.z - T.z) < 120 && T.z < A.z + 6)) return;
@@ -2318,7 +2364,7 @@
         const wd = Math.max(0, A.z - B0);
         waypoint.m.visible = live && !R.over && !jack && A.z > B0 + 1;
         waypoint.m.position.set(0, 7.5, B0); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
-        if (waypoint.m.visible) waypoint.draw(`BUNKER ${Math.round(wd / 5) * 5} m`, R.stage === "advance" ? `sealed · guard ${guardLeft}` : "door open", R.stage === "advance" ? COL.amber : COL.cyan);
+        if (waypoint.m.visible) waypoint.draw(`BUNKER ${Math.round(wd / 5) * 5} m`, R.stage === "advance" ? `locked · code ${R.got.filter(Boolean).length} / 4` : "door open", R.stage === "advance" ? COL.amber : COL.cyan);
       },
     },
     { // ---------------------------------------------------------------- 02
@@ -3247,7 +3293,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, powerUps, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, powerUps, keyDigits, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
