@@ -148,11 +148,11 @@
 
 <section id="splash">
   <div class="splash-inner">
-    <p class="kicker">One mission · 10 chapters · webxr</p>
+    <p class="kicker">One mission · 11 chapters · webxr</p>
     <h1 class="logo">datasphere</h1>
     <p class="pitch">The enemy's space lasers answer to a satellite uplink bunker behind their lines. Cross the battlefield, break into the bunker, jack into its mainframe and make it destroy its own lasers. Then get out, and get home.</p>
     <ul class="levels">
-      <li><b>01</b> Battlefield</li><li><b>02</b> The Bunker</li><li><b>03–09</b> Into the mainframe</li><li><b>10</b> Escape</li>
+      <li><b>01</b> Battlefield</li><li><b>02</b> The Bunker</li><li><b>03–10</b> Into the mainframe</li><li><b>11</b> Escape</li>
     </ul>
     <div class="actions">
       <button type="button" class="primary" id="vrBtn" disabled>Jack in with headset</button>
@@ -199,6 +199,7 @@
   if (!rec.battle) { if (savedRec) rec.unlocked++; rec.battle = true; }
   if (!rec.uplink) { if (savedRec && rec.unlocked >= 4) rec.unlocked++; rec.uplink = true; } // the data cube slotted in before the long-distance call
   if (!rec.story) { if (savedRec && rec.unlocked >= 1) rec.unlocked++; rec.story = true; } // The Bunker slotted in as chapter 2
+  if (!rec.sysop) { if (savedRec && rec.unlocked >= 9) rec.unlocked++; rec.sysop = true; } // Crush the Deck slotted in before the escape
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ opts, rec })); } catch (e) {} };
   const lrec = (id) => rec.levels[id] || (rec.levels[id] = { best: null, data: 0, clears: 0, tries: 0 });
 
@@ -1339,6 +1340,61 @@
         float s = d * step(0.35, h(vec2(lane, 9.0))); vec3 col = vec3(0.05, 0.12, 0.45) + vec3(0.6, 0.8, 1.0) * s * 1.4; gl_FragColor = vec4(col, uK * (0.6 + s * 0.4)); }` }));
   zoomTube.rotation.x = Math.PI / 2; zoomTube.visible = false; zoomTube.frustumCulled = false; zoomTube.renderOrder = 50; runScene.add(zoomTube);
   const DTMF_OK = "0123456789";
+  // ---- Crush the Deck (Johnny Mnemonic, 4:00-4:46): the sysop's face, liquid blue metal in a jewelled frame,
+  // at the end of a tunnel of blue-teal moiré and circuitry; reach in and crush it
+  const sysopGroup = new THREE.Group(); sysopGroup.visible = false; runScene.add(sysopGroup);
+  const sysTunnel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.4, 14), new THREE.ShaderMaterial({
+    side: THREE.BackSide, extensions: { derivatives: true }, uniforms: { uTime: U.uTime },
+    vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uTime; varying vec3 vP;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main(){
+        vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); vec2 c = abs(n.x) > 0.5 ? vP.zy : (abs(n.y) > 0.5 ? vP.xz : vP.xy);
+        float moire = sin(length(c * vec2(9.0, 7.0)) * 12.0 - uTime * 2.0) * sin(c.x * 31.0 + sin(c.y * 6.0) * 3.0) * sin(c.y * 27.0 - uTime);
+        vec2 cell = floor(c / 0.18), f = fract(c / 0.18); float tr = h(cell) < 0.5 ? smoothstep(0.12, 0.0, abs(f.y - 0.5)) : smoothstep(0.12, 0.0, abs(f.x - 0.5));
+        float k = smoothstep(-0.2, 0.6, moire) * 0.7 + tr * 0.5, depth = smoothstep(-7.0, 2.0, vP.z);
+        vec3 col = mix(vec3(0.02, 0.06, 0.1), vec3(0.25, 0.7, 0.85), k) * (0.4 + 0.6 * depth);
+        gl_FragColor = vec4(col, 1.0); }` }));
+  sysTunnel.position.z = 3; sysopGroup.add(sysTunnel);
+  const FW = 1.2, FH = 1.5, faceGeo = new THREE.PlaneGeometry(FW, FH, 48, 60);
+  const faceBase = faceGeo.attributes.position.array.slice();
+  const faceMat = new THREE.ShaderMaterial({ extensions: { derivatives: true }, uniforms: { uCrack: { value: 0 }, uTime: U.uTime, uFlash: { value: 0 } },
+    vertexShader: `varying vec3 vV; varying vec2 vUv; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = mv.xyz; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform float uCrack; uniform float uTime; uniform float uFlash; varying vec3 vV; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main(){ // liquid blue metal: a reflection of teal and black, hard highlights, cracks spreading as you crush it
+        vec3 n = normalize(cross(dFdx(vV), dFdy(vV))), r = reflect(normalize(vV), n);
+        float l = max(dot(n, normalize(vec3(-0.45, 0.55, 0.7))), 0.0), rim = pow(1.0 - abs(n.z), 2.0);
+        float band = 0.5 + 0.5 * sin(r.y * 4.0 + r.x * 2.5 + uTime * 0.5);
+        vec3 col = vec3(0.08, 0.32, 0.5) * (0.18 + 1.1 * l) + vec3(0.35, 0.75, 0.95) * rim * 0.6 + vec3(0.2, 0.5, 0.7) * band * 0.15
+          + pow(max(dot(r, normalize(vec3(-0.3, 0.5, 0.8))), 0.0), 30.0) * 0.8;
+        vec2 g = vUv * vec2(7.0, 9.0) + vec2(sin(vUv.y * 13.0) * 0.3, sin(vUv.x * 11.0) * 0.3); // thin white cracks, spreading as you crush it
+        float cx = fract(g.x + g.y * 0.7 + h(floor(g)) * 2.0), ck = smoothstep(0.03, 0.0, min(cx, 1.0 - cx)) * step(1.0 - uCrack * 0.9, h(floor(g * 0.5) + 3.0));
+        col = mix(col, vec3(0.95, 0.98, 1.0), ck * 0.75) + vec3(0.8, 0.9, 1.0) * uFlash;
+        gl_FragColor = vec4(col, 1.0); }` });
+  const faceMesh = new THREE.Mesh(faceGeo, faceMat); sysopGroup.add(faceMesh);
+  const jewelMat = new THREE.ShaderMaterial({ uniforms: { uTime: U.uTime }, vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uTime; varying vec3 vP; float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main(){ vec2 c = floor((vP.xy + vP.zz) * 26.0); float r = h(c), tw = 0.6 + 0.4 * sin(uTime * 3.0 + r * 20.0);
+        vec3 col = r < 0.35 ? vec3(0.9, 0.15, 0.1) : r < 0.6 ? vec3(1.0, 0.75, 0.15) : r < 0.8 ? vec3(0.2, 0.75, 0.3) : vec3(0.1, 0.2, 0.6); gl_FragColor = vec4(col * tw, 1.0); }` });
+  const faceFrame = new THREE.Group(); sysopGroup.add(faceFrame);
+  for (const [w, h, x, y] of [[FW + 0.3, 0.15, 0, FH / 2 + 0.075], [FW + 0.3, 0.15, 0, -FH / 2 - 0.075], [0.15, FH, -FW / 2 - 0.075, 0], [0.15, FH, FW / 2 + 0.075, 0]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.12), jewelMat); b.position.set(x, y, 0.02); faceFrame.add(b); }
+  function shapeFace(t, mouth, squash, rage) { // the face as a height field: dome, brow, sockets, nose, cheeks, a mouth that opens to scream
+    const p = faceGeo.attributes.position, G = (u, v, cu, cv, su, sv) => Math.exp(-(((u - cu) / su) ** 2 + ((v - cv) / sv) ** 2));
+    for (let i = 0; i < p.count; i++) {
+      let u = faceBase[i * 3] / FW, v = faceBase[i * 3 + 1] / FH * 1.25; const mh = 0.03 + 0.08 * mouth;
+      let z = 0.2 * G(u, v, 0, 0, 0.42, 0.55) + (0.05 + 0.03 * rage) * G(u, v, 0, 0.2, 0.3, 0.035) - 0.07 * (G(u, v, -0.15, 0.12, 0.07, 0.045) + G(u, v, 0.15, 0.12, 0.07, 0.045))
+        + 0.09 * G(u, v, 0, -0.02, 0.045, 0.13) + 0.03 * (G(u, v, -0.18, -0.05, 0.08, 0.08) + G(u, v, 0.18, -0.05, 0.08, 0.08))
+        + 0.022 * G(u, v, 0, -0.24, 0.17, mh + 0.04) - (0.06 + 0.07 * mouth) * G(u, v, 0, -0.24, 0.13, mh) + 0.04 * G(u, v, 0, -0.42, 0.12, 0.06)
+        + 0.006 * Math.sin(u * 30 + t * 2) * Math.sin(v * 25 - t * 1.7);
+      p.setXYZ(i, faceBase[i * 3] * (1 - squash * 0.35), faceBase[i * 3 + 1] * (1 + squash * 0.08), z * 2.2 * (1 - squash * 0.3));
+    }
+    p.needsUpdate = true;
+  }
+  shapeFace(0, 0.2, 0, 0);
+  // two chrome gloves for a screen (they lunge in when you hold the button)
+  let pcGloves = null; // made on first use (the chrome material is defined further down)
+  function makePcGloves() { pcGloves = [-1, 1].map((sd) => { const g = chromeGlove(); g.scale.setScalar(1.1); g.rotation.set(-1.2, sd * 0.2, sd * 0.3); g.visible = false; camera.add(g); g.userData.sd = sd; return g; }); }
   // ---- the security program: a giant head that assembles itself out of towers
   const BOSS_N = 96, BS = 1.7;
   const bossRoot = new THREE.Group(); bossRoot.visible = false; runScene.add(bossRoot);
@@ -1898,7 +1954,7 @@
     const { g, c } = vrTitle; g.clearRect(0, 0, c.width, c.height);
     g.textAlign = "center"; g.fillStyle = COL.cyan; g.shadowColor = COL.cyan; g.shadowBlur = 30;
     g.font = `150px ${DFONT}`; g.fillText("datasphere", 512, 190);
-    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("ONE MISSION · 10 CHAPTERS", 512, 262);
+    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("ONE MISSION · 11 CHAPTERS", 512, 262);
     g.fillStyle = COL.ink; g.font = `38px ${FONT}`; g.fillText("pull the trigger to enter the hub", 512, 344);
     vrTitle.tex.needsUpdate = true;
   }
@@ -2067,14 +2123,14 @@
   }
   const handProps = [0, 1].map(() => { const g = new THREE.Group(); g.add(chromeGun()); const gl = chromeGlove(); g.add(gl); g.userData.glove = gl; g.visible = false; return g; });
   const pcGun = chromeGun(); pcGun.scale.setScalar(0.8); pcGun.position.set(0.2, -0.19, -0.42); pcGun.visible = false; camera.add(pcGun);
-  function updateHandProps(on) { // in VR the right controller holds the gun, the left wears the glove; on a screen, the gun sits in first person
+  function updateHandProps(on, gloves = false) { // in VR the right controller holds the gun, the left wears the glove (or gloves on both); on a screen, the gun sits in first person
     const xr = renderer.xr.isPresenting;
     ctrls.forEach((c, i) => {
       const P = handProps[i], src = c.userData.src; if (P.parent !== c) c.add(P);
       const show = on && xr && !!(src && src.gamepad), right = src && src.handedness !== "left";
-      P.visible = show; P.children[0].visible = right; P.userData.glove.visible = !right;
+      P.visible = show; P.children[0].visible = right && !gloves; P.userData.glove.visible = !right || gloves;
     });
-    pcGun.visible = on && !xr && isFirst();
+    pcGun.visible = on && !xr && !gloves && isFirst();
   }
   const reticles = [0, 1].map((i) => {
     const m = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 4, 24), new THREE.MeshBasicMaterial({ color: i ? 0xff47d4 : 0x35e6ff, depthTest: false, transparent: true, fog: false }));
@@ -2186,7 +2242,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); Sound.recHum(0); ldGroup.visible = amberCity.visible = zoomTube.visible = false; sky.visible = true; fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); Sound.recHum(0); ldGroup.visible = amberCity.visible = zoomTube.visible = false; sky.visible = true; sysopGroup.visible = false; if (pcGloves) pcGloves.forEach((g) => (g.visible = false)); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -2208,6 +2264,7 @@
     battle: { fog: 0x3a1a08, dens: 0.0085, a: 0x2f8f4a, b: 0x9fff9a, world: false },
     ld: { fog: 0x02040e, dens: 0.004, a: 0x35e6ff, b: 0x7a5cff, world: false },
     amber: { fog: 0x1c0c03, dens: 0.011, a: 0xffa040, b: 0xd06010, world: false },
+    sysop: { fog: 0x020a10, dens: 0.02, a: 0x35e6ff, b: 0x7a5cff, world: false },
     gauntlet: { fog: 0x030806, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
   };
   function setEnv(name) {
@@ -3727,7 +3784,7 @@
             const d0 = b.d; b.d += 1.7 * dt;
             for (const e of pve) if (e.on && Math.abs(polyWrap(b.u - e.u)) < 0.5 && e.d >= d0 - 0.03 && e.d <= b.d + 0.02) { b.on = false; e.hp--; if (e.hp <= 0) this.killE(e); break; }
             if (b.on) for (const q of pbe) if (q.on && Math.abs(polyWrap(b.u - q.u)) < 0.5 && q.d >= d0 - 0.03 && q.d <= b.d + 0.03) { q.on = false; b.on = false; break; }
-            if (b.on && b.d >= 0.97) { b.on = false; if (R.stage === "core") { R.coreHp--; burst(POLY_C.x, POLY_C.y, -POLY_L + 2, C_VIOLET, 10); if (R.coreHp <= 0 && !R.over) { pvCore.visible = false; for (let k2 = 0; k2 < 6; k2++) burst(POLY_C.x + rand(-4, 4), POLY_C.y + rand(-4, 4), -POLY_L + 3, k2 % 2 ? C_VIOLET : C_DATA, 50); Sound.boom(true); levelComplete("CORE DESTROYED", "self-destruct running · jack out and run"); SELF.t = escapeEstimate(); Sound.say("danger"); } } }
+            if (b.on && b.d >= 0.97) { b.on = false; if (R.stage === "core") { R.coreHp--; burst(POLY_C.x, POLY_C.y, -POLY_L + 2, C_VIOLET, 10); if (R.coreHp <= 0 && !R.over) { pvCore.visible = false; for (let k2 = 0; k2 < 6; k2++) burst(POLY_C.x + rand(-4, 4), POLY_C.y + rand(-4, 4), -POLY_L + 3, k2 % 2 ? C_VIOLET : C_DATA, 50); Sound.boom(true); levelComplete("CORE DESTROYED", "one thing left: the sysop holds the self-destruct"); } } }
           }
           if (b.on) { polyPos(b.u, PATH); writeSet(pbSet, i, true, PATH.x, PATH.y, -b.d * POLY_L, 0, 0, t * 8, 1); } else writeSet(pbSet, i, false);
         }
@@ -3741,8 +3798,58 @@
         rig.position.set(0, 6 - 1.6 + 1.2, 11);
       },
     },
+    { // ---------------------------------------------------------------- 10
+      id: "sysop", num: "10", name: "Crush the Deck", col: COL.cyan, music: "trap", static: true, noGod: true, noShoot: true, ownIntro: true,
+      blurb: "The sysop surfaces in the blue. Reach in and crush its deck until it gives up the self-destruct.",
+      brief: "The core is gone, but the self-destruct still needs the sysop's authority, and the sysop is coming for you down the line. When its face surfaces in the blue, reach in with both hands and crush its deck until it gives up the self-destruct.",
+      init() {
+        setEnv("sysop"); sysopGroup.visible = true; faceMesh.visible = faceFrame.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
+        Object.assign(R, { stage: "crush", crush: 0, trace: 100, screamT: rand(5, 7), scream: 0, placed: false, grabs: new Map(), endT: 0 });
+        if (!pcGloves) makePcGloves();
+        if (handDots.parent !== runScene) runScene.add(handDots); handDots.material.color.set(0xffffff);
+        showMsg("THE SYSOP", renderer.xr.isPresenting ? "reach in with both hands and squeeze" : "hold the mouse on its face to crush it", COL.cyan, 4); Sound.say("threat");
+      },
+      objective() {
+        if (R.stage === "crush") return { label: `Trace ${Math.ceil(R.trace)}%`, text: `Crush the sysop's deck · ${Math.floor(R.crush * 100)}%`, prog: R.crush };
+        return { label: "Self-destruct", text: "Authorised · jack out", prog: 1 };
+      },
+      onRespawn() { R.crush = 0; R.trace = 100; R.screamT = rand(5, 7); },
+      update(dt, t) {
+        R.speed = 0; construct.root.visible = false; updateTrails(false); keyLight.position.set(0, 2.5, 0.5);
+        const xr = renderer.xr.isPresenting, live = alive();
+        if (!R.placed) { R.placed = true; if (xr) { const h = camera.position; sysopGroup.position.set(h.x, h.y - 0.05, h.z - 0.62).applyMatrix4(rig.matrixWorld); sysopGroup.scale.setScalar(0.42); } else { sysopGroup.position.set(0, 1.6, -2.3); sysopGroup.scale.setScalar(1); } }
+        if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); }
+        let grip = 0;
+        if (R.stage === "crush" && live) {
+          R.trace -= dt * 1.1; if (R.trace <= 0) { R.trace = 0; killNow("shatter"); }
+          for (const P of UPLINK.pointers.call(this)) { // each hand (or trigger, or the mouse) squeezing the face counts
+            if (!P.pressed) continue;
+            const on = P.hand ? (() => { const l = sysopGroup.worldToLocal(P.point.clone()); return Math.abs(l.x) < FW * 0.75 && Math.abs(l.y) < FH * 0.7 && l.z < 0.9; })() : P.ray.intersectObject(faceMesh, false).length > 0;
+            if (on) grip += P.hand || P.id[0] === "c" ? 1 : 1.6;
+          }
+          // two hands crush it in about 15 s, a mouse in about 18 s, screams aside
+          if (grip > 0) { R.crush = Math.min(1, R.crush + dt * 0.042 * Math.min(grip, 2)); if (Math.random() < dt * 6) Sound.shunk(); }
+          else R.crush = Math.max(0, R.crush - dt * 0.03);
+          R.screamT -= dt; // it fights back: a scream that throws your grip off
+          if (R.screamT <= 0) { R.screamT = rand(5.5, 8.5); R.scream = 1; if (grip > 0) R.crush = Math.max(0, R.crush - 0.07); Sound.say("denied"); Sound.blast(0.4, 8); pulse(0.6, 200); showMsg("IT SCREAMS", grip > 0 ? "hold on" : "get your hands in", COL.alarm, 1.1); }
+          if (R.crush >= 1) { // it breaks: white shards, and the self-destruct is yours
+            R.stage = "broken"; R.endT = 2.2; faceMesh.visible = faceFrame.visible = false; const c = sysopGroup.getWorldPosition(new V3());
+            for (let k = 0; k < 4; k++) shatterCube(c.x + rand(-0.3, 0.3), c.y + rand(-0.3, 0.3), c.z, C_WHITE, 20); burst(c.x, c.y, c.z, C_WHITE, 80); Sound.glass(); Sound.blast(1, 6); pulse(1, 400);
+            Sound.say("granted"); showMsg("SELF-DESTRUCT AUTHORISED", "the space lasers are turning on themselves", COL.amber, 3);
+          }
+        }
+        if (R.stage === "broken") { R.endT -= dt; if (R.endT <= 0 && !R.over) { levelComplete("DECK CRUSHED", "self-destruct running · jack out and run"); SELF.t = escapeEstimate(); Sound.say("danger"); } }
+        // the face: screams, rage, squashed and cracked as you crush it
+        R.scream = Math.max(0, R.scream - dt * 1.4);
+        shapeFace(t, 0.25 + 0.75 * R.scream + 0.25 * Math.max(0, Math.sin(t * 1.3)), R.crush, R.crush + R.scream);
+        faceMat.uniforms.uCrack.value = R.crush; faceMat.uniforms.uFlash.value = R.scream * 0.5;
+        faceMesh.position.set(Math.sin(t * 23) * 0.01 * (grip > 0 ? 1 : 0), 0, 0); faceFrame.rotation.z = Math.sin(t * 17) * 0.01 * R.crush;
+        if (pcGloves) pcGloves.forEach((g) => { const k = grip > 0 && !xr ? 1 : 0; g.visible = !xr && R.stage === "crush"; g.userData.k = lerp(g.userData.k || 0, k, Math.min(1, dt * 8)); const kk = g.userData.k; g.position.set(g.userData.sd * lerp(0.24, 0.13, kk), lerp(-0.22, -0.08, kk), lerp(-0.42, -0.8, kk)); });
+        updateHandProps(xr && R.stage === "crush", true);
+      },
+    },
   ];
-  // chapters 2 (the bunker) and 10 (the escape) reuse the battlefield's world and rules
+  // chapters 2 (the bunker) and 11 (the escape) reuse the battlefield's world and rules
   const BATTLE = LEVELS[0], UPLINK = LEVELS.find((L) => L.id === "uplink");
   const BUNKER = Object.assign(Object.create(BATTLE), {
     id: "bunker", num: "02", name: "The Bunker", col: COL.cyan, music: "bunker", ownIntro: true,
@@ -3757,7 +3864,7 @@
     },
   });
   const ESCAPE = Object.assign(Object.create(BATTLE), {
-    id: "escape", num: "10", name: "Escape", col: COL.alarm, music: "escape", ownIntro: true,
+    id: "escape", num: "11", name: "Escape", col: COL.alarm, music: "escape", ownIntro: true,
     blurb: "Jack out. The bunker's self-destruct is armed. Get out, then run home across the field.",
     brief: "The core is gone and the self-destruct is running. You've jacked out into a bunker on its own countdown, timed for the run home. Get out, watch the sky, and get back to our lines before the uplink blows. Its blast reaches 250 m.",
     init() {
@@ -3834,16 +3941,16 @@
     const g = p.g, W = p.c.width;
     frame(p, "mission");
     LEVELS.forEach((L, i) => {
-      const y = 96 + i * 89, h = 82, locked = i > rec.unlocked, r = lrec(L.id);
+      const y = 94 + i * 81, h = 74, locked = i > rec.unlocked, r = lrec(L.id);
       btn(p, 30, y, W - 60, h, locked ? () => { Sound.buzz(); } : () => startLevel(i), (g, hov) => {
-        g.fillStyle = locked ? COL.dim : L.col; g.font = `30px ${FONT}`; g.fillText(`${L.num}  ${L.name.toUpperCase()}`, 56, y + 34);
-        g.fillStyle = locked ? "rgba(143,151,200,0.7)" : COL.ink; g.font = `17px ${FONT}`;
-        const words = (locked ? `Locked · clear ${LEVELS[i - 1].name} to open it` : L.blurb).split(" "); let line = "", ly = y + 60;
-        for (const w of words) { if (g.measureText(line + w).width > W - 330) { g.fillText(line, 56, ly); line = ""; ly += 19; } line += w + " "; }
+        g.fillStyle = locked ? COL.dim : L.col; g.font = `28px ${FONT}`; g.fillText(`${L.num}  ${L.name.toUpperCase()}`, 56, y + 30);
+        g.fillStyle = locked ? "rgba(143,151,200,0.7)" : COL.ink; g.font = `16px ${FONT}`;
+        const words = (locked ? `Locked · clear ${LEVELS[i - 1].name} to open it` : L.blurb).split(" "); let line = "", ly = y + 52;
+        for (const w of words) { if (g.measureText(line + w).width > W - 330) { g.fillText(line, 56, ly); line = ""; ly += 17; } line += w + " "; }
         g.fillText(line, 56, ly);
         g.textAlign = "right"; g.font = `26px ${FONT}`; g.fillStyle = r.best !== null ? COL.heal : COL.dim;
-        g.fillText(r.best !== null ? `BEST ${fmtTime(r.best)}` : locked ? "LOCKED" : "NOT CLEARED", W - 56, y + 34);
-        if (!locked) { g.fillStyle = hov ? COL.amber : COL.dim; g.fillText(hov ? "JACK IN ▸" : `${r.tries} tries`, W - 56, y + 64); }
+        g.fillText(r.best !== null ? `BEST ${fmtTime(r.best)}` : locked ? "LOCKED" : "NOT CLEARED", W - 56, y + 30);
+        if (!locked) { g.fillStyle = hov ? COL.amber : COL.dim; g.fillText(hov ? "JACK IN ▸" : `${r.tries} tries`, W - 56, y + 58); }
         g.textAlign = "left";
       });
     });
@@ -3878,10 +3985,10 @@
     const g = p.g, W = p.c.width;
     frame(p, "records");
     LEVELS.forEach((L, i) => {
-      const r = lrec(L.id), y = 108 + i * 66;
-      g.fillStyle = i > rec.unlocked ? COL.dim : L.col; g.font = `26px ${FONT}`; g.fillText(`${L.num} ${L.name.toUpperCase()}`, 36, y);
-      g.fillStyle = COL.ink; g.font = `20px ${FONT}`;
-      g.fillText(`best ${r.best !== null ? fmtTime(r.best) : "—"}   haul ${r.data} GB   cleared ${r.clears}×   tries ${r.tries}`, 36, y + 28);
+      const r = lrec(L.id), y = 104 + i * 60;
+      g.fillStyle = i > rec.unlocked ? COL.dim : L.col; g.font = `24px ${FONT}`; g.fillText(`${L.num} ${L.name.toUpperCase()}`, 36, y);
+      g.fillStyle = COL.ink; g.font = `18px ${FONT}`;
+      g.fillText(`best ${r.best !== null ? fmtTime(r.best) : "—"}   haul ${r.data} GB   cleared ${r.clears}×   tries ${r.tries}`, 36, y + 25);
     });
     g.fillStyle = COL.dim; g.font = `24px ${FONT}`;
     g.fillText(`${rec.runs} level runs · ${rec.deaths} neural jacks burnt`, 36, 780);
@@ -4091,7 +4198,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, dodecs, ldGlobe, ldKeys, ldMap, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, dodecs, ldGlobe, ldKeys, ldMap, faceMesh, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
