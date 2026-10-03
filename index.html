@@ -160,8 +160,8 @@
     </div>
     <p class="note" id="xrNote">Checking for a VR headset…</p>
     <dl class="keys">
-      <dt>Headset</dt><dd>Stick steers · trigger fires where you point · grip boosts · A/B/X/Y god mode · always 1st person · hold stick click to quit a level · On foot: left stick walks where you look, right stick turns (snap or smooth, in the menu), A/X jumps · Gauntlet: right stick rolls · Open the Line: put the controllers down and pinch with your hands (or use the trigger)</dd>
-      <dt>Keys</dt><dd>WASD steers · mouse aims, click fires · Shift boosts · G god mode · V first/third person · on foot Space jumps, Q/E turn · Q/E roll in the Gauntlet · drag the cube in Open the Line, G for a hint · Esc quits a level · M mutes</dd>
+      <dt>Headset</dt><dd>Stick steers · trigger fires where you point · grip boosts · A/B/X/Y god mode · always 1st person · hold stick click to quit a level · On foot: left stick walks where you look, right stick turns (snap or smooth, in the menu), A/X jumps · Gauntlet: right stick rolls · Open the Line: put the controllers down, pinch a piece and twist your hand to turn it (or use the trigger and twist the controller)</dd>
+      <dt>Keys</dt><dd>WASD steers · mouse aims, click fires · Shift boosts · G god mode · V first/third person · on foot Space jumps, Q/E turn · Q/E roll in the Gauntlet · in Open the Line drag a piece, Q/E or the wheel turns it, G for a hint · Esc quits a level · M mutes</dd>
       <dt>Touch</dt><dd>Drag to steer · Fire, Boost and God buttons · tap targets in the Firewall Trap</dd>
     </dl>
     <p class="note">Hitting a firewall kills you on the spot. ICE cubes shatter and cost 20% integrity. Three neural jacks (lives) per level; each death spills 30% of your buffer.</p>
@@ -1131,66 +1131,79 @@
   })();
   const flares = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xeaffd0, fog: false }))); const sp = new THREE.Sprite(flareGlow); sp.scale.setScalar(9); g.add(sp); battle.add(g); return g; });
 
-  // ---- Open the Line: Johnny's data cube, twisted with your hands (or a controller / mouse)
+  // ---- Open the Line (Johnny Mnemonic): a golden segmented pyramid in an amber data city. Pieces are missing and
+  // float nearby; take each one with your hand (or a controller / the mouse), turn it to fit, and set it in its slot.
   const uplink = new THREE.Group(); uplink.visible = false; runScene.add(uplink);
-  const cubeRoot = new THREE.Group(); uplink.add(cubeRoot);
-  const CS = 0.12, CUBIE = 0.108, AXV = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
-  const FACE_COL = [0xff2a52, 0xff8a1f, 0xffffff, 0xffe04a, 0x35e6ff, 0x5dffb0]; // +x -x +y -y +z -z
-  const cubies = [];
+  const pyrRoot = new THREE.Group(); uplink.add(pyrRoot);
+  const PS = 0.56, PH = (PS * Math.sqrt(3)) / 2; // side and height of the pyramid's face, metres
+  const GOLD_FS = `uniform float uGlow; void main(){
+      vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); float l = max(dot(n, normalize(vec3(-0.4, 0.6, 0.7))), 0.0) + 0.25 * abs(n.z);
+      float sand = hash(floor(vWorld.xy * 260.0) + floor(vWorld.z * 260.0)) * 0.5 + hash(floor(vWorld.xy * 90.0)) * 0.5;
+      vec3 col = mix(vec3(0.42, 0.28, 0.12), vec3(0.86, 0.66, 0.36), sand) * (0.35 + 0.95 * l) + vec3(1.0, 0.7, 0.25) * uGlow;
+      gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld) * 0.5), 1.0); }`;
+  const pieces = [];
   {
-    const body = new THREE.BoxGeometry(CUBIE, CUBIE, CUBIE), sticker = new THREE.PlaneGeometry(CUBIE * 0.84, CUBIE * 0.84);
-    const bodyMat = new THREE.MeshBasicMaterial({ color: 0x0a0618 }), edgeMat = new THREE.LineBasicMaterial({ color: 0x8ff6ff, transparent: true, opacity: 0.55 });
-    const stickerMats = FACE_COL.map((c) => new THREE.MeshBasicMaterial({ color: c }));
-    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
-      if (!x && !y && !z) continue;
-      const g = new THREE.Group(), m = new THREE.Mesh(body, bodyMat); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(body), edgeMat)); g.add(m);
-      const c = { g, body: m, home: [x, y, z], pos: [x, y, z], q: new THREE.Quaternion(), stickers: [] };
-      [x, y, z].forEach((v, a) => {
-        if (!v) return;
-        const n = AXV[a].clone().multiplyScalar(v), col = a * 2 + (v > 0 ? 0 : 1), st = new THREE.Mesh(sticker, stickerMats[col]);
-        st.position.copy(n).multiplyScalar(CUBIE / 2 + 0.0015); st.quaternion.setFromUnitVectors(new V3(0, 0, 1), n); g.add(st);
-        c.stickers.push({ n, col });
-      });
-      m.userData.cubie = c; cubeRoot.add(g); cubies.push(c);
+    const hwAt = (y) => (PS / 2) * (1 - y / PH), y1 = PH * 0.25, y2 = PH * 0.6;
+    const polys = { // the face cut into five pieces along chevrons, like the film's
+      top: [[-hwAt(y2), y2], [hwAt(y2), y2], [0, PH]],
+      midL: [[-hwAt(y1), y1], [0.035, y1], [-0.035, y2], [-hwAt(y2), y2]],
+      midR: [[0.035, y1], [hwAt(y1), y1], [hwAt(y2), y2], [-0.035, y2]],
+      baseL: [[-PS / 2, 0], [-0.02, 0], [0.05, y1], [-hwAt(y1), y1]],
+      baseR: [[-0.02, 0], [PS / 2, 0], [hwAt(y1), y1], [0.05, y1]],
+    };
+    // a dark bronze back slab with empty slots showing as the base
+    const back = new THREE.Shape(); back.moveTo(-PS / 2 - 0.012, -0.012); back.lineTo(PS / 2 + 0.012, -0.012); back.lineTo(0, PH + 0.02); back.closePath();
+    const backGeo = new THREE.ExtrudeGeometry(back, { depth: 0.1, bevelEnabled: false }); backGeo.translate(0, -PH / 3, -0.13);
+    pyrRoot.add(new THREE.Mesh(backGeo, new THREE.MeshBasicMaterial({ color: 0x1a0d04 })));
+    for (const [name, poly] of Object.entries(polys)) {
+      const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cy = poly.reduce((a, p) => a + p[1], 0) / poly.length;
+      const inset = poly.map(([x, y]) => [x + (cx - x) * 0.05, y + (cy - y) * 0.05]); // a groove between pieces
+      const sh = new THREE.Shape(); inset.forEach(([x, y], i) => (i ? sh.lineTo(x - cx, y - cy) : sh.moveTo(x - cx, y - cy))); sh.closePath();
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.005, bevelSegments: 1 }); geo.translate(0, 0, -0.03);
+      const m = new THREE.Mesh(geo, shader({ ...U, uGlow: { value: 0 } }, GOLD_FS)); pyrRoot.add(m);
+      const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(inset.map(([x, y]) => new V3(x, y - PH / 3, 0.035))), new THREE.LineBasicMaterial({ color: 0xffc24a, transparent: true, depthTest: false }));
+      outline.renderOrder = 40; outline.visible = false; pyrRoot.add(outline);
+      pieces.push({ name, m, outline, slot: new V3(cx, cy - PH / 3, 0), sym: name === "top" ? (TAU / 3) : TAU, placed: true, ang: 0, pos: new V3(), drift: new V3(), spin: 0, held: null });
     }
   }
-  const cubeQ = new THREE.Quaternion(), cubeV = new V3();
-  function placeCubie(c, q) {
-    c.g.position.set(c.pos[0] * CS, c.pos[1] * CS, c.pos[2] * CS); c.g.quaternion.copy(c.q);
-    if (q) { c.g.position.applyQuaternion(q); c.g.quaternion.premultiply(q); }
-  }
-  function applyMove(m) { // commit a quarter turn of one slice
-    cubeQ.setFromAxisAngle(AXV[m.axis], (m.dir * Math.PI) / 2);
-    for (const c of cubies) if (c.pos[m.axis] === m.layer) {
-      cubeV.set(...c.pos).applyQuaternion(cubeQ); c.pos = [Math.round(cubeV.x), Math.round(cubeV.y), Math.round(cubeV.z)];
-      c.q.premultiply(cubeQ);
-    }
-  }
-  function cubeSolved() { // every outward face shows one colour
-    const seen = {};
-    for (const c of cubies) for (const st of c.stickers) {
-      cubeV.copy(st.n).applyQuaternion(c.q); const k = `${Math.round(cubeV.x)},${Math.round(cubeV.y)},${Math.round(cubeV.z)}`;
-      if (seen[k] === undefined) seen[k] = st.col; else if (seen[k] !== st.col) return false;
-    }
-    return true;
-  }
-  // hint: an arrow around the slice to turn next
-  const hintArrow = (() => {
-    const g = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color: 0xffc24a, transparent: true, depthTest: false }), arcA = Math.PI * 0.7;
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.007, 4, 40, arcA), mat), head = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.065, 8), mat);
-    head.position.set(Math.cos(arcA) * 0.27, Math.sin(arcA) * 0.27, 0); head.rotation.z = arcA;
-    arc.renderOrder = head.renderOrder = 40; g.add(arc, head); g.visible = false; cubeRoot.add(g); g.userData.mat = mat; return g;
+  const hintArrow = new THREE.Group(); // (kept for the reset code: nothing to draw now)
+  const pyrLabel = (() => { // "ACCESS:" floats at the pyramid's upper left, as in the film
+    const c = document.createElement("canvas"); c.width = 512; c.height = 128; const g = c.getContext("2d");
+    g.font = `bold 64px 'Archivo Black', 'Arial Black', sans-serif`; g.fillStyle = "#ffffff"; g.shadowColor = "#ffb040"; g.shadowBlur = 16; g.fillText("ACCESS:", 10, 90);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, fog: false }));
+    m.position.set(-0.42, PH * 0.75, 0); pyrRoot.add(m); return m;
   })();
   // your hands, drawn as glowing joints (the data gloves)
   const handDots = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.009, 0), new THREE.MeshBasicMaterial({ fog: false }), 60);
   handDots.frustumCulled = false; handDots.visible = false; uplink.add(handDots); handDots.setColorAt(0, new C3(1, 1, 1));
-  // backdrop: a wireframe globe with the hacker's node lit, slow rings, a grid floor
-  const upGlobe = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.SphereGeometry(5, 18, 12)), new THREE.LineBasicMaterial({ color: 0x35e6ff, transparent: true, opacity: 0.35, fog: false }));
-  upGlobe.position.set(0, 2.5, -16); uplink.add(upGlobe);
-  const upNode = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a52, fog: false })); upNode.position.set(3.2, 2.4, 3.4); upGlobe.add(upNode);
-  const upRings = [0.42, 0.5].map((r, i) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.003, 4, 64), new THREE.MeshBasicMaterial({ color: i ? 0xff47d4 : 0x35e6ff, transparent: true, opacity: 0.6 })); cubeRoot.parent.add(m); return m; });
-  const upFloor = new THREE.Mesh(new THREE.CircleGeometry(30, 48), makeFloorMat(U, 0x35e6ff, 0x7a5cff, 0)); upFloor.rotation.x = -Math.PI / 2; uplink.add(upFloor);
-
+  // the amber city: towers of lit windows, pagodas with red ledges, small glowing pyramids, floating lamps, a glassy floor
+  {
+    const cols = [0xff9a2a, 0xffb84a, 0xd86a18, 0xffcf7a].map((c) => new C3(c)), n = 70, towers = new THREE.InstancedMesh(unitBox, towerMat, n);
+    for (let i = 0; i < n; i++) {
+      let a, d; do { a = rand(-2.6, 2.6) + Math.PI; d = rand(7, 38); } while (Math.abs(a - Math.PI) < 0.45 && d < 20); // all round, mostly ahead, but not right behind the pyramid
+      const w = rand(1.5, 5), h = rand(4, 30);
+      dummy.position.set(Math.sin(a) * d, h / 2 - 1, Math.cos(a) * d); dummy.rotation.set(0, rand(0, 1), 0); dummy.scale.set(w, h, w); dummy.updateMatrix(); towers.setMatrixAt(i, dummy.matrix); towers.setColorAt(i, cols[i % 4]);
+    }
+    dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1); towers.frustumCulled = false; uplink.add(towers);
+    const ledge = new THREE.MeshPhongMaterial({ color: 0xb02a10, emissive: 0x3a0800, flatShading: true }), screenM = [0x1a46b0, 0xb0561e, 0xb09a6e, 0x4aa88e].map((c) => new THREE.MeshBasicMaterial({ color: c }));
+    for (const [x, z] of [[5.5, -7.5], [-8, -12], [9.5, -15]]) { // pagodas
+      for (let k = 0; k < 6; k++) {
+        const y = k * 1.1; const l = new THREE.Mesh(new THREE.BoxGeometry(1.8 - k * 0.12, 0.12, 1.8 - k * 0.12), ledge); l.position.set(x, y + 0.5, z); uplink.add(l);
+        const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.9 - k * 0.06, 0.7), screenM[(k + x) & 3]); sc.position.set(x, y + 0.95, z + 0.86 - k * 0.06); uplink.add(sc);
+      }
+    }
+    const pyrM = new THREE.MeshPhongMaterial({ color: 0xc8782a, emissive: 0x3a1800, flatShading: true }), rimM = new THREE.MeshBasicMaterial({ color: 0xffe36a });
+    for (const [x, z, s] of [[-4.6, -6.5, 1.8], [-7.5, -11, 2.6], [6.4, -9.5, 1.4], [-2.2, -16, 3.4]]) { // small pyramids with glowing rims
+      const p = new THREE.Mesh(new THREE.ConeGeometry(s * 0.7, s * 1.8, 4), pyrM); p.position.set(x, s * 0.9 - 0.2, z); p.rotation.y = Math.PI / 4; uplink.add(p);
+      const r = new THREE.Mesh(new THREE.BoxGeometry(s * 1.05, 0.06, s * 1.05), rimM); r.position.set(x, 0.0, z); uplink.add(r);
+    }
+    const lamp = new THREE.SpriteMaterial({ map: starTex((g) => { const r = g.createRadialGradient(128, 128, 0, 128, 128, 128); r.addColorStop(0, "rgba(255,220,140,1)"); r.addColorStop(0.3, "rgba(255,150,40,0.6)"); r.addColorStop(1, "rgba(255,120,20,0)"); g.fillStyle = r; g.fillRect(0, 0, 256, 256); }), blending: ADD, depthWrite: false, transparent: true, fog: false });
+    for (let i = 0; i < 16; i++) { const sp = new THREE.Sprite(lamp); const a = rand(-2.2, 2.2) + Math.PI, d = rand(4, 16); sp.position.set(Math.sin(a) * d, rand(1.5, 6), Math.cos(a) * d); sp.scale.setScalar(rand(0.5, 1.6)); uplink.add(sp); }
+    const sign = (() => { const c = document.createElement("canvas"); c.width = 128; c.height = 640; const g = c.getContext("2d"); g.fillStyle = "#1a0a02"; g.fillRect(0, 0, 128, 640); g.fillStyle = "#ffcf5a"; g.font = `bold 66px 'Archivo Black', sans-serif`; g.translate(90, 620); g.rotate(-Math.PI / 2); g.fillText("UPLINK·NODE", 0, 0); return new THREE.CanvasTexture(c); })();
+    const sm = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 3), new THREE.MeshBasicMaterial({ map: sign })); sm.position.set(3.4, 3.4, -8); uplink.add(sm);
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), shader({ ...U }, `void main(){ float g = gridL(vWorld.xz / 2.0); vec3 col = vec3(0.06, 0.03, 0.01) + vec3(0.6, 0.3, 0.06) * g * 0.35; gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`));
+    fl.rotation.x = -Math.PI / 2; fl.position.y = -0.2; uplink.add(fl);
+  }
   // ---- the security program: a giant head that assembles itself out of towers
   const BOSS_N = 96, BS = 1.7;
   const bossRoot = new THREE.Group(); bossRoot.visible = false; runScene.add(bossRoot);
@@ -1787,6 +1800,7 @@
   let mouseDown = false, mouseSeen = false;
   const Ptr = { id: null, ox: 0, oy: 0, x: 0, y: 0, boost: false, fire: false, god: false, tap: null };
   const setMouse = (e) => mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  cv.addEventListener("wheel", (e) => { if (R && R.id === "uplink") { R.wheel = (R.wheel || 0) + Math.sign(e.deltaY) * 0.26; e.preventDefault(); } }, { passive: false }); // turns the held pyramid piece
   cv.addEventListener("pointermove", (e) => {
     if (e.pointerType === "mouse") { setMouse(e); mouseSeen = true; }
     else if (e.pointerId === Ptr.id) { Ptr.x = clamp((e.clientX - Ptr.ox) / 70, -1, 1); Ptr.y = clamp(-(e.clientY - Ptr.oy) / 70, -1, 1); }
@@ -2016,7 +2030,7 @@
     tunnel: { fog: 0x03100c, dens: 0.011, a: 0x5dffb0, b: 0x35e6ff, world: false },
     cage: { fog: 0x12020a, dens: 0.012, a: 0xff2a3a, b: 0x3a0010, world: false },
     poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
-    uplink: { fog: 0x02060f, dens: 0.02, a: 0x35e6ff, b: 0x7a5cff, world: false },
+    uplink: { fog: 0x1c0c03, dens: 0.03, a: 0xffa040, b: 0xd06010, world: false },
     battle: { fog: 0x3a1a08, dens: 0.0085, a: 0x2f8f4a, b: 0x9fff9a, world: false },
     gauntlet: { fog: 0x07021a, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
   };
@@ -3091,42 +3105,45 @@
         updateShips(dt, t); updateRecs(dt, t); updateBoss(dt, t);
       },
     },
-    { // ---------------------------------------------------------------- 05
-      id: "uplink", num: "06", name: "Open the Line", col: COL.cyan, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
-      blurb: "Twist the data cube with your hands (or controllers) to open a modem line out of the net.",
-      brief: "The core runs on military crypto you can't break alone. Crack the data cube with your hands to open a long-distance modem line out of the enemy net, before the trace lands.",
+    { // ---------------------------------------------------------------- 06
+      id: "uplink", num: "06", name: "Open the Line", col: COL.amber, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
+      blurb: "The golden pyramid. Take the missing pieces with your hands, turn them, set them in place.",
+      brief: "The core runs on military crypto you can't break alone. The lock on the way out is a golden pyramid with pieces missing. Take each floating piece, turn it to fit, and set it in its slot to open a long-distance modem line out of the enemy net, before the trace lands.",
       init() {
         setEnv("uplink"); uplink.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
-        Object.assign(R, { stage: "solve", round: 0, trace: 100, idle: 0, hintT: 0, anim: null, grabs: new Map(), placed: false, nextT: 0, sol: [] });
-        cubeRoot.position.set(0, 1.33, -0.62); cubeRoot.quaternion.setFromEuler(new THREE.Euler(0.45, -0.6, 0));
-        this.scramble(3);
-        const xr = renderer.xr.isPresenting;
-        showMsg("OPEN THE LINE", xr ? "pinch a face and drag to turn it · pinch beside the cube to spin it" : "drag a face to turn it · drag beside the cube to spin it", COL.cyan, 5);
+        Object.assign(R, { stage: "solve", round: 0, trace: 100, idle: 0, hintT: 0, grabs: new Map(), placed: false, nextT: 0, hintPiece: null });
+        pyrRoot.position.set(0, 1.45, -1.25); pyrRoot.rotation.set(-0.06, 0, 0); // on a screen; in the headset it moves to arm's reach
+        this.deal(2);
+        showMsg("OPEN THE LINE", renderer.xr.isPresenting ? "pinch a floating piece · twist your hand to turn it · set it in its slot" : "drag a piece · Q / E or the wheel turns it · drop it in its slot", COL.amber, 5);
       },
       objective() {
-        if (R.stage === "solve") return { label: `Trace ${Math.ceil(R.trace)}% · lock ${R.round + 1} / 2`, text: R.sol.length ? `Solve the data cube · ${renderer.xr.isPresenting ? "B" : "G"} for a hint` : "Solve the data cube", prog: R.round / 2 };
+        const left = pieces.filter((P) => !P.placed).length;
+        if (R.stage === "solve") return { label: `Trace ${Math.ceil(R.trace)}% · lock ${R.round + 1} / 2`, text: `Set the missing pieces · ${left} left · ${renderer.xr.isPresenting ? "B" : "G"} for a hint`, prog: R.round / 2 + (0.5 * (pieces.length - left)) / pieces.length };
         return { label: "Line open", text: "Dialling out…", prog: 1 };
       },
-      onRespawn() { R.trace = 100; R.anim = null; R.grabs.clear(); this.scramble(R.round ? 6 : 3); },
-      scramble(n) {
-        for (const c of cubies) { c.pos = c.home.slice(); c.q.identity(); }
-        R.sol = []; let last = null;
-        for (let i = 0; i < n; i++) {
-          let m; do { m = { axis: (Math.random() * 3) | 0, layer: ((Math.random() * 3) | 0) - 1, dir: Math.random() < 0.5 ? -1 : 1 }; } while (last && m.axis === last.axis && m.layer === last.layer);
-          applyMove(m); R.sol.push({ ...m, dir: -m.dir }); last = m;
-        }
-        cubies.forEach((c) => placeCubie(c)); R.idle = 0;
+      onRespawn() { R.trace = 100; R.grabs.clear(); this.deal(R.round ? pieces.length : 2); },
+      deal(n) { // take n pieces out of the pyramid and set them adrift, turned
+        const out = pieces.slice().sort(() => Math.random() - 0.5).slice(0, n);
+        pieces.forEach((P, i) => {
+          P.placed = !out.includes(P); P.held = null; P.outline.visible = false; P.m.material.uniforms.uGlow.value = 0;
+          if (P.placed) { P.pos.copy(P.slot); P.ang = 0; }
+          else { const a = (i / pieces.length) * TAU + rand(-0.3, 0.3); P.pos.set(Math.cos(a) * rand(0.38, 0.5), Math.sin(a) * 0.3 + 0.05, rand(0.08, 0.16)); P.ang = rand(0.6, TAU - 0.6); P.spin = rand(-0.25, 0.25); P.ph = rand(0, TAU); }
+        });
+        R.idle = 0; R.hintPiece = null;
       },
-      startMove(m) {
-        if (R.anim) return; R.anim = { m, t: 0 }; Sound.blip(m.axis * 3 + m.layer + 1); R.idle = 0;
-        const top = R.sol[R.sol.length - 1]; // keep a valid solution: undo the top move, or remember how to undo this one
-        if (top && top.axis === m.axis && top.layer === m.layer && top.dir === m.dir) R.sol.pop(); else R.sol.push({ ...m, dir: -m.dir });
+      fits(P) { // close enough, and turned close enough (the top piece fits three ways round)
+        const d = Math.hypot(P.pos.x - P.slot.x, P.pos.y - P.slot.y), a = ((P.ang % P.sym) + P.sym) % P.sym, da = Math.min(a, P.sym - a);
+        return d < 0.05 && da < 0.4;
       },
-      afterMove() {
-        if (!cubeSolved()) return;
-        R.sol = []; R.round++; Sound.chime(); burst(cubeRoot.position.x, cubeRoot.position.y, cubeRoot.position.z, C_SIG, 50); R.data += 15;
-        if (R.round < 2) { showMsg("LOCK ONE OPEN", "one more lock on the line", COL.cyan, 2); Sound.say("granted"); R.nextT = 1.8; R.stage = "next"; }
-        else { R.stage = "ring"; R.nextT = 3.4; Sound.ringback(); Sound.say("granted"); showMsg("LINE OPEN", "dialling out of the net", COL.heal, 3.2); }
+      seat(P) {
+        P.placed = true; P.held = null; P.pos.copy(P.slot); P.ang = 0; P.outline.visible = false; R.idle = 0; R.hintPiece = null;
+        Sound.chime(); burst(...pyrRoot.localToWorld(P.slot.clone()).toArray(), C_DATA, 18);
+        if (pieces.every((q) => q.placed)) this.solved();
+      },
+      solved() {
+        R.round++; Sound.say("granted"); R.data += 15; const c = pyrRoot.getWorldPosition(new V3()); burst(c.x, c.y, c.z, C_SIG, 60);
+        if (R.round < 2) { showMsg("LOCK ONE OPEN", "one more lock on the line · every piece this time", COL.amber, 2.2); R.nextT = 1.8; R.stage = "next"; }
+        else { R.stage = "ring"; R.nextT = 3.4; Sound.ringback(); showMsg("LINE OPEN", "dialling out of the net", COL.heal, 3.2); }
       },
       // pointers: pinching hands (contact), or a ray from a controller trigger / the mouse
       pointers() {
@@ -3136,90 +3153,75 @@
           for (const src of session ? session.inputSources : []) {
             if (src.hand) {
               const tip = XRF.getJointPose(src.hand.get("index-finger-tip"), ref), th = XRF.getJointPose(src.hand.get("thumb-tip"), ref);
+              const wr = XRF.getJointPose(src.hand.get("index-finger-metacarpal"), ref), mid = XRF.getJointPose(src.hand.get("pinky-finger-metacarpal"), ref); // across the palm
               for (const j of src.hand.values()) { const p = XRF.getJointPose(j, ref); if (p && k < 60) { const q = p.transform.position; dummy.position.set(q.x, q.y, q.z).applyMatrix4(rig.matrixWorld); dummy.updateMatrix(); handDots.setMatrixAt(k++, dummy.matrix); } }
               if (!tip || !th) continue;
               const a = tip.transform.position, b = th.transform.position, d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z), id = "h" + src.handedness;
-              const was = R.grabs.has(id) || (R.pinch && R.pinch[id]); const pressed = d < (was ? 0.04 : 0.022);
+              const was = R.grabs.has(id) || (R.pinch && R.pinch[id]), pressed = d < (was ? 0.04 : 0.022);
               (R.pinch = R.pinch || {})[id] = pressed;
-              out.push({ id, pressed, hand: true, point: new V3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2).applyMatrix4(rig.matrixWorld) });
+              let twist = null; // the hand's roll, seen face-on to the pyramid
+              if (wr && mid) { const w = new V3(wr.transform.position.x, wr.transform.position.y, wr.transform.position.z).applyMatrix4(rig.matrixWorld), m2 = new V3(mid.transform.position.x, mid.transform.position.y, mid.transform.position.z).applyMatrix4(rig.matrixWorld); const l1 = pyrRoot.worldToLocal(w), l2 = pyrRoot.worldToLocal(m2); twist = Math.atan2(l2.y - l1.y, l2.x - l1.x); }
+              out.push({ id, pressed, hand: true, twist, point: new V3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2).applyMatrix4(rig.matrixWorld) });
             }
           }
           for (let i = k; i < 60; i++) { dummy.position.set(0, -99, 0); dummy.updateMatrix(); handDots.setMatrixAt(i, dummy.matrix); }
           dummy.position.set(0, 0, 0); dummy.updateMatrix();
           handDots.visible = k > 0; handDots.instanceMatrix.needsUpdate = true;
           handDots.material.color.set(Object.values(R.pinch || {}).some(Boolean) ? 0xffc24a : 0x35e6ff);
-          ctrls.forEach((c, i) => { const gp = c.userData.src && c.userData.src.gamepad; if (!gp) return; const r = new THREE.Raycaster(); ctrlRay(c, r); r.far = 5; out.push({ id: "c" + i, pressed: !!(gp.buttons[0] && gp.buttons[0].pressed), ray: r }); });
+          ctrls.forEach((c, i) => {
+            const gp = c.userData.src && c.userData.src.gamepad; if (!gp) return; const r = new THREE.Raycaster(); ctrlRay(c, r); r.far = 5;
+            const up = new V3(0, 1, 0).applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion())), lu = up.clone().transformDirection(new THREE.Matrix4().copy(pyrRoot.matrixWorld).invert());
+            out.push({ id: "c" + i, pressed: !!(gp.buttons[0] && gp.buttons[0].pressed), ray: r, twist: Math.atan2(lu.y, lu.x) });
+          });
         } else {
-          handDots.visible = false; const r = new THREE.Raycaster(); r.setFromCamera(mouse, camera); out.push({ id: "m", pressed: mouseDown, ray: r, ndc: mouse.clone() });
+          handDots.visible = false; const r = new THREE.Raycaster(); r.setFromCamera(mouse, camera);
+          out.push({ id: "m", pressed: mouseDown, ray: r, keyTurn: ((K.KeyQ ? 1 : 0) - (K.KeyE ? 1 : 0)) * 2.4 });
         }
         return out;
       },
-      local(p) { return cubeRoot.worldToLocal(p.clone()); },
+      planeAt(ray, z) { // where a ray meets the plane z (in the pyramid's space)
+        const inv = new THREE.Matrix4().copy(pyrRoot.matrixWorld).invert(), o = ray.ray.origin.clone().applyMatrix4(inv), d = ray.ray.direction.clone().transformDirection(inv);
+        if (Math.abs(d.z) < 1e-4) return null; const s2 = (z - o.z) / d.z; return s2 < 0 ? null : o.addScaledVector(d, s2);
+      },
       update(dt, t) {
         R.speed = 0; construct.root.visible = false; updateTrails(false); keyLight.position.set(0, 2.5, 0.5);
         const xr = renderer.xr.isPresenting, live = alive();
-        if (xr && !R.placed) { R.placed = true; const h = camera.position; cubeRoot.position.set(h.x, h.y - 0.3, h.z - 0.42).applyMatrix4(rig.matrixWorld); }
-        if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.42, 0, 0); }
-        upGlobe.rotation.y += dt * 0.08; upNode.scale.setScalar(1 + 0.3 * Math.sin(t * 6));
-        upRings.forEach((m, i) => { m.position.copy(cubeRoot.position); m.rotation.set(t * (0.3 + i * 0.2), t * (0.5 - i * 0.3), 0); });
-        if (R.stage === "solve" && live) { R.trace -= dt * (R.round ? 0.75 : 0.6); if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
-        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.scramble(6); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `cracked in ${fmtTime(R.time)} · now make the call`); } } }
-        // turning animation
-        if (R.anim) {
-          R.anim.t += dt / 0.22; const m = R.anim.m, k = smooth01(R.anim.t);
-          const q = new THREE.Quaternion().setFromAxisAngle(AXV[m.axis], (m.dir * Math.PI * k) / 2);
-          for (const c of cubies) if (c.pos[m.axis] === m.layer) placeCubie(c, q);
-          if (R.anim.t >= 1) { applyMove(m); cubies.forEach((c) => placeCubie(c)); R.anim = null; this.afterMove(); }
-        }
-        // input
-        const ptrs = this.pointers(), half = CS * 1.5, seen = new Set();
-        for (const P of ptrs) {
-          seen.add(P.id); let G = R.grabs.get(P.id);
-          if (!P.pressed || !live || R.stage !== "solve") { R.grabs.delete(P.id); continue; }
-          if (!G) { // press: grab a face to turn a slice, or grab beside the cube to spin it
-            let hitL = null;
-            if (P.hand) { const l = this.local(P.point); if (Math.max(Math.abs(l.x), Math.abs(l.y), Math.abs(l.z)) < half + 0.03) hitL = l; else if (l.length() < 0.45) G = { mode: "spin", last: P.point.clone() }; }
-            else { const h = P.ray.intersectObjects(cubies.map((c) => c.body))[0]; if (h) hitL = this.local(h.point); else G = { mode: "spin", last: P.ndc ? P.ndc.clone() : P.ray.ray.direction.clone() }; }
-            if (hitL) {
-              const ab = [Math.abs(hitL.x), Math.abs(hitL.y), Math.abs(hitL.z)], na = ab.indexOf(Math.max(...ab)), ns = Math.sign(hitL.getComponent(na)) || 1;
-              const cp = [hitL.x, hitL.y, hitL.z].map((v) => clamp(Math.round(v / CS), -1, 1)); cp[na] = ns;
-              G = { mode: "turn", na, ns, p0: hitL, cubie: cubies.find((c) => c.pos[0] === cp[0] && c.pos[1] === cp[1] && c.pos[2] === cp[2]), done: false };
-            }
-            if (G) R.grabs.set(P.id, G);
+        if (xr && !R.placed) { R.placed = true; const h = camera.position; pyrRoot.position.set(h.x, h.y - 0.28, h.z - 0.5).applyMatrix4(rig.matrixWorld); }
+        if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
+        if (R.stage === "solve" && live) { R.trace -= dt * (R.round ? 0.7 : 0.55); if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
+        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.deal(pieces.length); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `cracked in ${fmtTime(R.time)} · now make the call`); } } }
+        // input: grab a floating piece, carry it, turn it, let go
+        const ptrs = this.pointers(), seen = new Set();
+        for (const Pt of ptrs) {
+          seen.add(Pt.id); let G = R.grabs.get(Pt.id);
+          if (!Pt.pressed || !live || R.stage !== "solve") { if (G && G.piece && !G.piece.placed) G.piece.held = null; R.grabs.delete(Pt.id); continue; }
+          if (!G) {
+            let piece = null;
+            if (Pt.hand) { const l = pyrRoot.worldToLocal(Pt.point.clone()); let bd = 0.09; for (const P of pieces) if (!P.placed && !P.held) { const d = l.distanceTo(P.pos); if (d < bd) { bd = d; piece = P; } } if (piece) G = { piece, off: piece.pos.clone().sub(l), a0: piece.ang - (Pt.twist ?? 0) }; }
+            else { const h = Pt.ray.intersectObjects(pieces.filter((P) => !P.placed && !P.held).map((P) => P.m))[0]; if (h) { piece = pieces.find((P) => P.m === h.object); const l = this.planeAt(Pt.ray, piece.pos.z) || piece.pos.clone(); G = { piece, off: piece.pos.clone().sub(l), a0: piece.ang - (Pt.twist ?? 0) }; } }
+            if (G) { G.piece.held = Pt.id; R.grabs.set(Pt.id, G); Sound.blip(4); R.idle = 0; } else R.grabs.set(Pt.id, { piece: null });
             continue;
           }
-          if (G.mode === "turn" && !G.done && !R.anim && G.cubie) {
-            let p;
-            if (P.hand) p = this.local(P.point);
-            else { // where the ray meets the grabbed face's plane, in cube space
-              const inv = new THREE.Matrix4().copy(cubeRoot.matrixWorld).invert(), o = P.ray.ray.origin.clone().applyMatrix4(inv), d = P.ray.ray.direction.clone().transformDirection(inv);
-              const dn = d.getComponent(G.na); if (Math.abs(dn) < 1e-4) continue; const s2 = (G.p0.getComponent(G.na) - o.getComponent(G.na)) / dn; if (s2 < 0) continue; p = o.addScaledVector(d, s2);
-            }
-            const dv = p.sub(G.p0); dv.setComponent(G.na, 0);
-            if (dv.length() > (P.hand ? 0.03 : 0.025)) {
-              const a = Math.abs(dv.x) >= Math.abs(dv.y) && Math.abs(dv.x) >= Math.abs(dv.z) ? 0 : Math.abs(dv.y) >= Math.abs(dv.z) ? 1 : 2;
-              const r = AXV[G.na].clone().multiplyScalar(G.ns).cross(AXV[a].clone().multiplyScalar(Math.sign(dv.getComponent(a))));
-              const axis = Math.abs(r.x) > 0.5 ? 0 : Math.abs(r.y) > 0.5 ? 1 : 2;
-              this.startMove({ axis, layer: G.cubie.pos[axis], dir: Math.sign(r.getComponent(axis)) }); G.done = true;
-            }
-          } else if (G.mode === "spin") { // trackball-ish: drag sideways to yaw, up/down to pitch
-            let yaw = 0, pitch = 0;
-            if (P.hand) { yaw = (P.point.x - G.last.x) * 9; pitch = -(P.point.y - G.last.y) * 9; G.last.copy(P.point); }
-            else if (P.ndc) { yaw = (P.ndc.x - G.last.x) * 3; pitch = -(P.ndc.y - G.last.y) * 3; G.last.copy(P.ndc); }
-            else { const d = P.ray.ray.direction; yaw = (d.x - G.last.x) * 4; pitch = -(d.y - G.last.y) * 4; G.last.copy(d); }
-            cubeRoot.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AXV[1], yaw)).premultiply(new THREE.Quaternion().setFromAxisAngle(AXV[0], -pitch));
-          }
+          const P = G.piece; if (!P || P.placed) continue;
+          let l = Pt.hand ? pyrRoot.worldToLocal(Pt.point.clone()) : this.planeAt(Pt.ray, P.pos.z); if (!l) continue;
+          P.pos.copy(l.add(G.off)); P.pos.z = clamp(P.pos.z, 0.02, 0.3);
+          if (Pt.twist !== null && Pt.twist !== undefined) P.ang = G.a0 + Pt.twist; if (Pt.keyTurn) P.ang += Pt.keyTurn * dt;
+          if (R.wheel) { P.ang += R.wheel; R.wheel = 0; }
+          if (this.fits(P)) { this.seat(P); R.grabs.delete(Pt.id); } // it clicks home as soon as it lines up
         }
-        for (const id of [...R.grabs.keys()]) if (!seen.has(id)) R.grabs.delete(id);
-        // hint: on request (G / B), or after 25 s without a turn
-        R.idle += dt; R.hintT = Math.max(0, R.hintT - dt); if (IN.god) R.hintT = 4;
-        const top = R.sol[R.sol.length - 1], showHint = top && R.stage === "solve" && !R.anim && (R.hintT > 0 || R.idle > 25);
-        hintArrow.visible = !!showHint;
-        if (showHint) {
-          hintArrow.quaternion.setFromUnitVectors(new V3(0, 0, 1), AXV[top.axis].clone().multiplyScalar(top.dir));
-          hintArrow.position.copy(AXV[top.axis]).multiplyScalar(top.layer * CS); hintArrow.userData.mat.opacity = 0.55 + 0.45 * Math.sin(t * 8);
+        for (const id of [...R.grabs.keys()]) if (!seen.has(id)) { const G = R.grabs.get(id); if (G.piece && !G.piece.placed) G.piece.held = null; R.grabs.delete(id); }
+        R.wheel = 0;
+        // drifting pieces, the glow of the one being held, the hint
+        R.idle += dt; R.hintT = Math.max(0, R.hintT - dt); if (IN.god) { R.hintT = 5; R.hintPiece = null; }
+        const loose = pieces.filter((P) => !P.placed), showHint = R.stage === "solve" && loose.length && (R.hintT > 0 || R.idle > 25);
+        if (showHint && (!R.hintPiece || R.hintPiece.placed)) R.hintPiece = loose[(Math.random() * loose.length) | 0];
+        for (const P of pieces) {
+          if (!P.placed && !P.held) { P.ang += P.spin * dt; P.pos.y += Math.sin(t * 0.8 + P.ph) * 0.0006; }
+          P.m.position.copy(P.pos); P.m.rotation.set(0, 0, P.ang);
+          const hinted = showHint && P === R.hintPiece;
+          P.m.material.uniforms.uGlow.value = P.held ? 0.25 : hinted ? 0.15 + 0.15 * Math.sin(t * 6) : 0;
+          P.outline.visible = hinted; if (hinted) P.outline.material.opacity = 0.5 + 0.5 * Math.sin(t * 6);
         }
-        for (const c of cubies) if (!R.anim) c.g.scale.setScalar(showHint && c.pos[top.axis] === top.layer ? 1 + 0.06 * (0.5 + 0.5 * Math.sin(t * 8)) : 1);
       },
     },
     { // ---------------------------------------------------------------- 06
@@ -3720,7 +3722,7 @@
     if (renderer.xr.isPresenting) return;
     if (S.mode === "hub") { camera.position.set(0, 1.6, 1.8); camera.rotation.set(-0.06, 0, 0); }
     else if (S.mode === "run" && R && R.id === "polybius") { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.02, 0, 0); }
-    else if (S.mode === "run" && R && R.id === "uplink") { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.42, 0, 0); }
+    else if (S.mode === "run" && R && R.id === "uplink") { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
     else if (S.mode === "run" && R && R.id === "trap") { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); }
     else { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
   }
@@ -3878,7 +3880,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, cubies, cubeRoot, applyMove, cubeSolved, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
