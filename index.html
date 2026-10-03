@@ -1700,14 +1700,27 @@
       g.fillRect(cx - u * 1.3, cy - u * 0.6, u * 0.6, u * 1.6); g.fillRect(cx + u * 0.7, cy - u * 0.6, u * 0.6, u * 1.6);
     }
   }
-  function updateVisor(on, n = 0, integ = 100) {
+  function overlay(on, key, draw) { // draw(g, W, H, low) onto the screen overlay, or the head-locked plane in VR; redrawn only when key changes
     const xr = renderer.xr.isPresenting;
     visorCv.style.display = on && !xr ? "block" : "none"; vrVisor.m.visible = on && xr;
     if (!on) { VIS.key = ""; return; }
     if (xr) { vrVisor.m.quaternion.copy(camera.quaternion); vrVisor.m.position.set(0, -0.02, -1.25).applyQuaternion(camera.quaternion).add(camera.position); }
-    const key = `${Math.min(n, 6)}|${Math.ceil(integ / 12.5)}|${xr}|${innerWidth}x${innerHeight}`; if (key === VIS.key) return; VIS.key = key;
-    if (xr) { drawVisor(vrVisor.g, 1024, 576, n, integ); vrVisor.tex.needsUpdate = true; }
-    else { visorCv.width = innerWidth; visorCv.height = innerHeight; drawVisor(visorCv.getContext("2d"), innerWidth, innerHeight, n, integ, innerHeight - Math.max(150, innerHeight * 0.2)); }
+    key = `${key}|${xr}|${innerWidth}x${innerHeight}`; if (key === VIS.key) return; VIS.key = key;
+    if (xr) { draw(vrVisor.g, 1024, 576, 576 * 0.9); vrVisor.tex.needsUpdate = true; }
+    else { visorCv.width = innerWidth; visorCv.height = innerHeight; draw(visorCv.getContext("2d"), innerWidth, innerHeight, innerHeight - Math.max(150, innerHeight * 0.2)); }
+  }
+  function updateVisor(on, n = 0, integ = 100) { overlay(on, `v${Math.min(n, 6)}|${Math.ceil(integ / 12.5)}`, (g, W, H, low) => drawVisor(g, W, H, n, integ, low)); }
+  function drawKeypad(g, W, H, low, num, done) { // Johnny's ENTRY CODE pad: the digits dialled so far, the next key lit
+    g.clearRect(0, 0, W, H); const u = Math.min(W, H) * 0.045, x0 = W * 0.05, y0 = low - u * 5.6;
+    g.textAlign = "left"; g.fillStyle = "#e8f4ff"; g.shadowColor = "#4a9aff"; g.shadowBlur = 10; g.font = `bold ${Math.round(u * 0.62)}px 'Archivo Black', 'Arial Black', sans-serif`; g.fillText("ENTRY CODE", x0, y0 - u * 1.4);
+    g.font = `${Math.round(u * 0.7)}px ${FONT}`; g.fillText(num.slice(0, done).replace(/(.{4})/g, "$1 ") + "_", x0, y0 - u * 0.45);
+    "123456789*0#".split("").forEach((k, i) => {
+      const x = x0 + (i % 3) * u * 1.25, y = y0 + Math.floor(i / 3) * u * 1.25, next = k === num[done];
+      g.fillStyle = next ? "rgba(255,194,74,0.9)" : "rgba(40,90,200,0.35)"; g.fillRect(x, y, u, u);
+      g.strokeStyle = next ? "#ffe0a0" : "rgba(140,190,255,0.7)"; g.lineWidth = 2; g.strokeRect(x, y, u, u);
+      g.fillStyle = next ? "#1a0a00" : "#d8e8ff"; g.textAlign = "center"; g.font = `${Math.round(u * 0.6)}px ${FONT}`; g.fillText(k, x + u / 2, y + u * 0.72); g.textAlign = "left";
+    });
+    g.shadowBlur = 0;
   }
   // the self-destruct countdown: starts when the core dies and runs through the escape (it pauses for briefings)
   const SELF = { t: null, shown: "" };
@@ -3255,6 +3268,7 @@
       update(dt, t) {
         const n = this.number;
         flightMove(dt, 27, true); flightView(dt, t, true);
+        overlay(R.stage === "dial" && alive() && !R.over, `k${R.digit}`, (g, W, H, low) => drawKeypad(g, W, H, low, n, R.digit)); // the ENTRY CODE pad
         tunnel.position.z = A.z - 220;
         const H = A.z - 260;
         if (R.stage === "dial") {
@@ -3753,6 +3767,7 @@
   }
   function startLevel(i) {
     const L = LEVELS[i];
+    if (L.id !== "escape") SELF.t = null; // only the escape inherits a running self-destruct
     R = newRun(L, i);
     resetWorld();
     A.x = 0; A.y = 4; A.z = 0; A.vx = A.vy = 0; prev.set(0, 4, 0);
