@@ -2768,6 +2768,7 @@
         friendlies.forEach((F) => { Object.assign(F, { x: F.x0, z: F.z0, st: "held", t: 0, seen: false }); F.c.restore(); F.c.root.visible = false; F.tag.visible = true; });
         R.freed = 0; R.ff = 0;
         R.code = keyDigits.map(() => (Math.random() * 10) | 0); R.got = [false, false, false, false]; R.hunt = false;
+        if (this.id === "battle") { rec.bunkerCode = R.code.join(""); save(); } // Long Distance's entry code ends with it
         keyDigits.forEach((K, i) => { K.on = true; K.g.visible = true; K.d = R.code[i]; drawKeyDigit(K); }); keypad.draw(R.code, R.got);
         btShips.forEach((S2) => { S2.on = false; S2.g.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
         flares.forEach((f, i) => f.position.set(rand(-25, 25), 20 + i * 9, rand(-30, -90)));
@@ -3117,7 +3118,7 @@
           A.x = lerp(A.x, JACK.x, dt * 2.5); A.y = lerp(A.y, JACK.y, dt * 2.5); A.z = lerp(A.z, JACK.z + 0.1, dt * 1.6 * k);
           construct.body.rotation.x = lerp(0, -Math.PI / 2, k); construct.gun.visible = k < 0.5;
           R.fogBase.lerp(C_SIG, dt * 0.6);
-          if (R.jackT > 2.6 && !R.over) { burst(JACK.x, JACK.y, JACK.z + 0.3, C_SIG, 90); levelComplete("JACKED IN", `you're in the enemy mainframe · ${R.kills} threats down`); R.overT = R.overMax = 2.4; }
+          if (R.jackT > 2.6 && !R.over) { burst(JACK.x, JACK.y, JACK.z + 0.3, C_SIG, 90); levelComplete("JACKED IN", `you're in the open net · now find the mainframe · ${R.kills} threats down`); R.overT = R.overMax = 2.4; }
         }
         // view
         const first = isFirst(), k = clamp(R.walk / 6, 0, 1), bob = Math.abs(Math.sin(R.stepPh)) * 0.05 * k;
@@ -3376,16 +3377,17 @@
           if (R.waveT <= 0 && ships.filter((s) => s.on).length < 3) { spawnWave(R.shipKills > 10 ? 1 : 0); R.waveT = 3; Sound.say("threat"); if (R.shipKills === 0) showMsg("PARANOIDS INBOUND", "point and shoot", COL.orange, 1.6); }
           if (R.shipKills >= this.need) { R.stage = "rec"; spawnRec(30); spawnWave(0); }
         } else if (R.stage === "rec") { if (R.recKills >= 1 && !ships.some((s) => s.on && s.st !== "out")) { R.stage = "boss"; spawnBoss(12); } }
-        else if (R.stage === "boss" && !B.on && B.st === "dead") { R.stage = "done"; levelComplete("SECURITY DOWN", `${R.kills} kills in ${fmtTime(R.time)} · the core is exposed`); }
+        else if (R.stage === "boss" && !B.on && B.st === "dead") { R.stage = "done"; levelComplete("SECURITY DOWN", `${R.kills} kills in ${fmtTime(R.time)} · the core's lock is ahead`); }
         updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 5 });
         updateShips(dt, t); updateRecs(dt, t); updateBoss(dt, t);
       },
     },
     { // ---------------------------------------------------------------- 06
-      id: "beijing", num: "06", name: "Long Distance", col: COL.heal, music: "beijing", number: "19950526", ownIntro: true,
+      id: "beijing", num: "06", name: "Long Distance", col: COL.heal, music: "beijing", ownIntro: true,
+      get number() { if (!/^\d{4}$/.test(rec.bunkerCode || "")) { rec.bunkerCode = String((Math.random() * 10000) | 0).padStart(4, "0"); save(); } return "1995" + rec.bunkerCode; }, // your contact's prefix, then the four digits that opened the bunker
       get noShoot() { return !R || R.stage !== "fly"; },
-      blurb: "Johnny's call: pull up the world, dial your hacker's node, fly the amber city to it.",
-      brief: "Long distance. Into the open net: pull the globe to you, dial your hacker contact's node on the ENTRY CODE pad, then fly low across the amber data city to reach it before the trace finds you. They hold the backdoor you need.",
+      blurb: "Pull up the world, dial the mainframe's entry code, fly the golden city to its node.",
+      brief: "You're in the open net. Your hacker contact worked out the mainframe's entry code: their prefix, 1995, then the four digits that opened the bunker door. Pull the globe to you, dial it on the ENTRY CODE pad, then fly low across the golden city to the mainframe's node before the trace finds you.",
       init() {
         setEnv("ld"); rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
         Object.assign(R, { stage: "boot", st: 0, trace: 100, dialled: 0, grabs: new Map(), prevPress: {}, placed: false, nPk: -60, nIce: -120 });
@@ -3399,9 +3401,9 @@
         const n = this.number, shown = `${n.slice(0, 4)} ${n.slice(4)}`;
         if (R.stage === "boot" || R.stage === "zoom") return { label: "Long distance", text: "Jacking into the open net…", prog: 0.05 };
         if (R.stage === "city" || R.stage === "unfold") return { label: `Trace ${Math.ceil(R.trace)}%`, text: renderer.xr.isPresenting ? "Reach out and grab the globe" : "Click the globe to pull up the world", prog: 0.1 };
-        if (R.stage === "dial") return { label: `Trace ${Math.ceil(R.trace)}% · dialled ${R.dialled}/${n.length}`, text: `ENTRY CODE: dial ${shown} · next ${n[R.dialled]}`, prog: 0.15 + (0.35 * R.dialled) / n.length };
-        if (R.stage === "zoom2") return { label: "Connecting", text: "Routing to the hacker's node…", prog: 0.5 };
-        return { label: "Long distance", text: `Fly to the hacker's node · ${Math.max(0, Math.round(A.z + AMBER_LEN))} m`, prog: 0.5 + 0.5 * clamp(-A.z / AMBER_LEN, 0, 1) };
+        if (R.stage === "dial") return { label: `Trace ${Math.ceil(R.trace)}% · dialled ${R.dialled}/${n.length}`, text: R.dialled < 4 ? `ENTRY CODE: dial 1995, then the bunker door code · next ${n[R.dialled]}` : `ENTRY CODE: now the bunker door code · ${R.dialled - 4} / 4`, prog: 0.15 + (0.35 * R.dialled) / n.length };
+        if (R.stage === "zoom2") return { label: "Connecting", text: "Routing to the mainframe's node…", prog: 0.5 };
+        return { label: "Long distance", text: `Fly to the mainframe's node · ${Math.max(0, Math.round(A.z + AMBER_LEN))} m`, prog: 0.5 + 0.5 * clamp(-A.z / AMBER_LEN, 0, 1) };
       },
       onRespawn() { R.trace = 100; for (const p of ice) if (p.on && p.z < A.z && p.z > A.z - 90) p.on = false; },
       place(xr) { // the globe and the map: at arm's length in the headset, further off on a screen
@@ -3440,7 +3442,7 @@
             }
           } else if (R.stage === "unfold") { // the globe pulls in and opens out flat
             const k = smooth01(R.st / 1.1); ldGlobe.scale.setScalar((xr ? 0.16 : 0.38) * (1 - k) + 0.001); ldMap.visible = true; ldMap.scale.setScalar(Math.max(0.001, ldMap.userData.s * k));
-            if (R.st > 1.1) { R.stage = "dial"; R.st = 0; ldGlobe.visible = false; showMsg("ENTRY CODE", `dial ${this.number.slice(0, 4)} ${this.number.slice(4)}`, COL.cyan, 3); }
+            if (R.st > 1.1) { R.stage = "dial"; R.st = 0; ldGlobe.visible = false; showMsg("ENTRY CODE", "1995, then the four digits that opened the bunker", COL.cyan, 3.5); }
           } else if (R.stage === "dial") {
             for (const P of presses) {
               let key = null;
@@ -3448,11 +3450,11 @@
               else { const h = P.ray.intersectObjects(ldKeys, false)[0]; if (h) key = h.object; }
               if (!key) continue;
               const k = key.userData.key; key.userData.flash = 1;
-              if (k === this.number[R.dialled]) { if (DTMF_OK.includes(k)) Sound.dtmf(k); R.dialled++; drawMapPanel(R.dialled, this.number); }
-              else { Sound.buzz(); Sound.say("denied"); R.trace = Math.max(0, R.trace - 6); key.userData.bad = 1; }
+              if (k === this.number[R.dialled]) { if (DTMF_OK.includes(k)) Sound.dtmf(k); R.dialled++; R.miss = 0; drawMapPanel(R.dialled, this.number); }
+              else { Sound.buzz(); Sound.say("denied"); R.trace = Math.max(0, R.trace - 6); key.userData.bad = 1; R.miss = (R.miss || 0) + 1; if (R.dialled >= 4 && R.miss === 2) showMsg("FORGOTTEN IT?", "the right key is lit", COL.amber, 1.6); }
               if (R.dialled >= this.number.length) { R.stage = "zoom2"; R.st = 0; Sound.ringback(); Sound.say("granted"); break; }
             }
-            for (const m of ldKeys) { m.userData.flash = Math.max(0, (m.userData.flash || 0) - dt * 3); m.userData.bad = Math.max(0, (m.userData.bad || 0) - dt * 2); m.material.color.setRGB(0.1 + m.userData.flash * 0.9 + m.userData.bad * 0.8, 0.23 + m.userData.flash * 0.6, 0.6 + m.userData.flash * 0.4 - m.userData.bad * 0.5); if (m.userData.key === this.number[R.dialled]) m.material.color.lerp(new C3(0xffc24a), 0.35 + 0.25 * Math.sin(t * 6)); }
+            for (const m of ldKeys) { m.userData.flash = Math.max(0, (m.userData.flash || 0) - dt * 3); m.userData.bad = Math.max(0, (m.userData.bad || 0) - dt * 2); m.material.color.setRGB(0.1 + m.userData.flash * 0.9 + m.userData.bad * 0.8, 0.23 + m.userData.flash * 0.6, 0.6 + m.userData.flash * 0.4 - m.userData.bad * 0.5); if (m.userData.key === this.number[R.dialled] && (R.dialled < 4 || (R.miss || 0) >= 2)) m.material.color.lerp(new C3(0xffc24a), 0.35 + 0.25 * Math.sin(t * 6)); }
           } else if (R.stage === "zoom2") { // white boxes close in on the hacker's node, then you dive in
             const hx = ((HACKER[0] + 180) / 360 - 0.5) * MAPW, hy = (0.5 - (90 - HACKER[1]) / 180) * MAPH;
             zoomBoxes.forEach((b, i) => { const k = clamp(R.st / 1.6 - i * 0.15, 0, 1), w = lerp(MAPW * 0.9, 0.08, smooth01(k)), h = lerp(MAPH * 0.9, 0.06, smooth01(k)); b.visible = k > 0 && k < 1; b.position.set(lerp(0, hx, smooth01(k)), lerp(0, hy, smooth01(k)), 0.03); b.scale.set(w, h, 1); });
@@ -3465,19 +3467,19 @@
           while (R.nPk > H && R.nPk > -AMBER_LEN + 40) { spawnPattern(R.nPk, 0.12); R.nPk -= rand(40, 60); }
           while (R.nIce > H && R.nIce > -AMBER_LEN + 60) { spawnIce(R.nIce, Math.random() < 0.45 ? 1 : 0); R.nIce -= rand(35, 60); }
           updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 5 });
-          if (live && A.z < -AMBER_LEN + 12 && !R.over) { Sound.connected(); Sound.say("granted"); burst(A.x, A.y, A.z, C_DATA, 90); levelComplete("NODE REACHED", "the hacker's lock is ahead"); }
+          if (live && A.z < -AMBER_LEN + 12 && !R.over) { Sound.connected(); Sound.say("granted"); burst(A.x, A.y, A.z, C_DATA, 90); levelComplete("NODE REACHED", "the mainframe opens up ahead"); }
         }
       },
       startFlight() {
         R.stage = "fly"; R.st = 0; ldGroup.visible = false; amberCity.visible = true; setEnv("amber");
         A.x = 0; A.y = 5; A.z = 0; A.vx = A.vy = 0; prev.set(0, 5, 0); rig.position.set(0, 3.45, 4.6); R.eyeCal = null;
-        showMsg("THE AMBER CITY", "fly to the hacker's node · traces are hunting you", COL.amber, 3); Sound.whoosh();
+        showMsg("THE GOLDEN CITY", "fly to the mainframe's node · traces are hunting you", COL.amber, 3); Sound.whoosh();
       },
     },
     { // ---------------------------------------------------------------- 06
       id: "uplink", num: "07", name: "Open the Line", col: COL.amber, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
-      blurb: "The hacker's node is sealed by a golden pyramid. Fit the missing pieces to open the line.",
-      brief: "You've reached the hacker's node, and it's sealed: ACCESS through a golden pyramid with pieces missing. Take each floating piece, turn it to fit and set it in its slot. Open the line and the hacker hands you the backdoor to the core, before the trace lands.",
+      blurb: "The core's controls sit behind a golden pyramid. Fit the missing pieces to open the line.",
+      brief: "Back in the golden heart of the mainframe, the core's controls are sealed: ACCESS through a golden pyramid with pieces missing. Take each floating piece, turn it to fit and set it in its slot. Open the line to the core before the trace lands.",
       init() {
         setEnv("uplink"); uplink.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0; if (handDots.parent !== uplink) uplink.add(handDots);
         Object.assign(R, { stage: "solve", round: 0, trace: 100, idle: 0, hintT: 0, grabs: new Map(), placed: false, nextT: 0, hintPiece: null });
@@ -3558,7 +3560,7 @@
         if (xr && !R.placed) { R.placed = true; const h = camera.position; pyrRoot.position.set(h.x, h.y - 0.28, h.z - 0.5).applyMatrix4(rig.matrixWorld); }
         if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
         if (R.stage === "solve" && live) { R.trace -= dt * (R.round ? 0.7 : 0.55); if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
-        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.deal(pieces.length); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `the hacker hands you the backdoor · on to the core`); } } }
+        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.deal(pieces.length); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `the core's controls are open to you`); } } }
         // input: grab a floating piece, carry it, turn it, let go
         const ptrs = this.pointers(), seen = new Set();
         for (const Pt of ptrs) {
@@ -3595,8 +3597,8 @@
     },
     { // ---------------------------------------------------------------- 07
       id: "trap", num: "08", name: "Firewall Trap", col: COL.alarm, music: "trap", noGod: true, static: true, tapAim: true, aimDist: 9,
-      blurb: "The mainframe heard the call. Lock the rings, repeat the echo code, break out of the cage.",
-      brief: "The mainframe heard your call and caged you in a shrinking firewall. Lock the rotating rings when their gaps line up, then repeat the echo code to break out.",
+      blurb: "The mainframe has noticed you. Lock the rings, repeat the echo code, break out of the cage.",
+      brief: "You're inside the core's controls, and the mainframe has noticed: it cages you in a shrinking firewall. Lock the rotating rings when their gaps line up, then repeat the echo code to break out.",
       init() {
         setEnv("cage"); trapGroup.visible = true;
         rig.position.set(0, 0, 0); A.x = -1.3; A.y = 0.75; A.z = -3; R.echoT = 0;
@@ -3694,8 +3696,8 @@
     },
     { // ---------------------------------------------------------------- 08
       id: "polybius", num: "09", name: "Polybius Core", col: COL.violet, music: "polybius", lane: true, godName: "SUPERZAPPER",
-      blurb: "The mainframe core. Hold the rim, survive four waves, destroy the core and the lasers blow.",
-      brief: "The mainframe core, running on a cabinet nobody remembers. Hold the rim and shoot down the tube. Survive four waves, destroy the core, and the hacker's backdoor makes the space lasers tear themselves apart.",
+      blurb: "The mainframe core. Hold the rim, survive four waves, destroy the core.",
+      brief: "The mainframe core, running on a cabinet nobody remembers. Hold the rim and shoot down the tube. Survive four waves and destroy the core; then only its sysop stands between you and the space lasers' self-destruct.",
       init() {
         setEnv("poly"); R.wave = 0; R.u = 0.5; R.spawnLeft = 0; R.spawnT = 0; R.core = 0; R.coreHp = 90; R.laneCD = 0;
         this.startWave(0);
@@ -3897,7 +3899,7 @@
   const MAINFRAME = {
     id: "mainframe", num: "03", name: "Into the Mainframe", col: COL.amber, music: "run", ownIntro: true,
     blurb: "One run in: fill 120 GB on the data highway, roll through the spike corridor, beat its security programs.",
-    brief: "You're in the enemy net. Fill your buffer with 120 GB of access data on the data highway, take the exit port into the mainframe's spike corridor and roll through ten keyholes, then fight its security programs in open circuit space until the core is exposed. One run, no way back.",
+    brief: "Through the node and into the mainframe. Fill your buffer with 120 GB of access data on the data highway, take the exit port into its spike corridor and roll through ten keyholes, then fight its security programs in open circuit space. One run, no way back.",
     phase: 0,
     get sub() { return FLIGHTS[this.phase]; },
     get roll() { return this.phase === 1; }, // the right stick rolls you in the spike corridor
@@ -3927,7 +3929,7 @@
     },
   };
   for (const L of FLIGHTS) LEVELS.splice(LEVELS.indexOf(L), 1);
-  LEVELS.splice(2, 0, MAINFRAME);
+  LEVELS.splice(LEVELS.findIndex((L) => L.id === "beijing") + 1, 0, MAINFRAME); // after the dial-in: you fly into the mainframe you just found
   LEVELS.forEach((L, i) => (L.num = String(i + 1).padStart(2, "0"))); // chapters numbered in order
   const SPLASH = { id: "splash", name: "Splash", music: "splash", objective: () => ({ label: "", text: "", prog: 0 }),
     init() { setEnv("highway"); R.nPk = -40; R.nIce = -120; },
