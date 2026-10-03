@@ -2,7 +2,7 @@
 <title>Datasphere</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Major+Mono+Display&family=Share+Tech+Mono&display=swap">
 <style>
   /* Layout: full-bleed WebGL cyberspace. A splash screen opens the game; after it a thin
      terminal overlay (HUD strip bottom-left, messages centred, touch buttons bottom-right)
@@ -270,9 +270,9 @@
 
   function makeSky(fogRef) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, uniforms: { uFogColor: fogRef },
+      side: THREE.BackSide, depthWrite: false, uniforms: { uFogColor: fogRef, uBand: { value: 0 } },
       vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform vec3 uFogColor; varying vec3 vDir;
+      fragmentShader: `uniform vec3 uFogColor; uniform float uBand; varying vec3 vDir;
         float h3(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
         void main(){
           float y = vDir.y;
@@ -280,6 +280,14 @@
           col += vec3(0.25, 0.02, 0.22) * exp(-abs(y) * 18.0) * 0.5;
           vec3 c = vDir * 260.0; float h = h3(floor(c));
           col += vec3(0.7, 0.9, 1.0) * step(0.9975, h) * smoothstep(0.45, 0.0, length(fract(c) - 0.5)) * smoothstep(0.04, 0.3, y);
+          if (uBand > 0.5) { // the sim's sky: black, with a burning band low on the horizon
+            vec3 b = mix(vec3(1.0, 0.82, 0.25), vec3(1.0, 0.45, 0.06), smoothstep(0.0, 0.05, y));
+            b = mix(b, vec3(0.75, 0.08, 0.04), smoothstep(0.05, 0.13, y));
+            b = mix(b, vec3(0.12, 0.0, 0.02), smoothstep(0.13, 0.26, y));
+            b = mix(b, vec3(0.0), smoothstep(0.26, 0.42, y));
+            b += vec3(0.8, 0.85, 0.9) * step(0.9985, h) * smoothstep(0.45, 0.0, length(fract(c) - 0.5)) * smoothstep(0.25, 0.5, y);
+            col = y < 0.0 ? vec3(0.05, 0.03, 0.0) : b;
+          }
           gl_FragColor = vec4(col, 1.0);
         }`,
     }));
@@ -736,13 +744,20 @@
     return terrain(x, z);
   }
   const btGroundMat = shader({ ...U, uRed: { value: 0 } }, `uniform float uRed;
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
     void main(){
-      vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
-      vec2 c = abs(n.y) > 0.5 ? vWorld.xz : (abs(n.z) > 0.5 ? vWorld.xy : vWorld.zy);
-      float minor = gridL(c / 2.0), major = gridL(c / 10.0), mud = hash(floor(c / 1.7)) * 0.05;
-      float cy = vWorld.y * 2.5, contour = (1.0 - min(abs(fract(cy - 0.5) - 0.5) / max(fwidth(cy), 1e-4), 1.0)) * smoothstep(0.999, 0.97, abs(n.y)) * step(0.5, abs(n.y));
-      vec3 col = vec3(0.25, 1.0, 0.45) * (0.025 + mud + minor * 0.16 + major * 0.5 + contour * 0.35) * (abs(n.y) > 0.5 ? 0.45 + 0.55 * abs(n.y) : 0.65);
-      col = mix(col, vec3(1.0, 0.1, 0.15) * (0.08 + major * 0.6), uRed);
+      vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); if (n.y < 0.0) n = -n;
+      vec2 p = vWorld.xz;
+      float m = vn(p * 0.55) * 0.6 + vn(p * 1.7) * 0.3 + vn(p * 4.3) * 0.1;          // the mottle
+      float facet = hash(floor(p / 3.0) + floor(vWorld.y));                           // each facet a slightly different green
+      vec3 olive = mix(vec3(0.16, 0.22, 0.05), vec3(0.30, 0.38, 0.09), facet);
+      vec3 col = mix(olive, vec3(0.95, 0.62, 0.12), smoothstep(0.62, 0.7, m) * 0.85);   // orange-yellow speckle
+      col = mix(col, vec3(0.06, 0.38, 0.40), smoothstep(-0.3, -0.9, vWorld.y) * step(-1.9, vWorld.y)); // teal in the hollows (not the trench floors)
+      float sun = max(dot(n, normalize(vec3(0.25, 0.55, -0.8))), 0.0), rim = pow(1.0 - abs(n.y), 2.0);
+      col *= 0.35 + 0.95 * sun; col += vec3(0.5, 0.18, 0.02) * rim * 0.35;              // low orange sun from the horizon ahead
+      if (abs(n.y) < 0.5) col = mix(vec3(0.12, 0.09, 0.04), col, 0.4);                  // trench walls: dark earth
+      col = mix(col, vec3(1.0, 0.1, 0.15) * (0.15 + m * 0.4), uRed);
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`, { side: THREE.DoubleSide });
   {
@@ -750,7 +765,7 @@
     for (let i = 0; i < edges.length; i += 2) { // displaced ground between trench edges (height is 0 at the edges), in chunks so far ones can be skipped
       const n = Math.ceil((edges[i] - edges[i + 1]) / 40);
       for (let c = 0; c < n; c++) {
-        const z0 = lerp(edges[i], edges[i + 1], c / n), z1 = lerp(edges[i], edges[i + 1], (c + 1) / n), geo = new THREE.PlaneGeometry(160, z0 - z1, 80, Math.ceil((z0 - z1) / 1.5));
+        const z0 = lerp(edges[i], edges[i + 1], c / n), z1 = lerp(edges[i], edges[i + 1], (c + 1) / n), geo = new THREE.PlaneGeometry(160, z0 - z1, 40, Math.ceil((z0 - z1) / 3));
         geo.rotateX(-Math.PI / 2); geo.translate(0, 0, (z0 + z1) / 2);
         const pa = geo.attributes.position; for (let k = 0; k < pa.count; k++) pa.setY(k, terrain(pa.getX(k), pa.getZ(k)));
         const m = new THREE.Mesh(geo, btGroundMat); battle.add(m); BT.chunks = BT.chunks || []; BT.chunks.push({ m, z0, z1 });
@@ -763,39 +778,83 @@
     }
     const tm = new THREE.Mesh(mergeGeos(parts), btGroundMat); tm.frustumCulled = false; battle.add(tm);
   }
-  const btBoxMat = shader({ ...U }, `void main(){ float e = boxEdge(vUv, 1.4); vec3 col = vCol * (0.07 + e * 0.9); gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`);
+  const mountains = (() => {
+    const pts = [], N = 72, geo = new THREE.BufferGeometry(), pos = [];
+    for (let i = 0; i < N; i++) { const a = (i / N) * TAU; pts.push([a, rand(0.5, 1) * (i % 3 ? 26 : 48) + rand(0, 14)]); }
+    for (let i = 0; i < N; i++) {
+      const [a0, h0] = pts[i], h1 = pts[(i + 1) % N][1], a1 = a0 + TAU / N, am = (a0 + a1) / 2, r = 640, r2 = 590; // a1 unwrapped, so the last segment doesn't span the sky
+      const P = (a, rr, y) => [Math.sin(a) * rr, y, -Math.cos(a) * rr];
+      const peak = P(am, r - 20, (h0 + h1) / 2 + rand(-6, 14)), b0 = P(a0, r2, -5), b1 = P(a1, r2, -5), t0 = P(a0, r, h0), t1 = P(a1, r, h1);
+      pos.push(...b0, ...t0, ...peak, ...b0, ...peak, ...b1, ...b1, ...peak, ...t1);
+    }
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: {}, extensions: { derivatives: true }, side: THREE.DoubleSide,
+      vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `varying vec3 vP; void main(){
+        vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); float l = abs(dot(n, normalize(vec3(0.2, 0.4, -0.9))));
+        float g = fract(sin(dot(floor(vP.xz / 18.0), vec2(12.9898, 78.233))) * 43758.5);
+        vec3 col = mix(vec3(0.12, 0.16, 0.04), vec3(0.32, 0.36, 0.08), g) * (0.3 + 0.9 * l) + vec3(0.45, 0.16, 0.02) * pow(l, 4.0) * 0.6;
+        col = mix(col, vec3(0.35, 0.12, 0.03), smoothstep(40.0, -5.0, vP.y) * 0.5); // haze at the foot
+        gl_FragColor = vec4(col, 1.0); }` }));
+    m.frustumCulled = false; m.renderOrder = -5; m.visible = false; runScene.add(m); return m;
+  })();
+  const btBoxMat = shader({ ...U }, `void main(){ vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); float l = abs(dot(n, normalize(vec3(0.25, 0.6, -0.75))));
+    float e = boxEdge(vUv, 1.2); vec3 col = vCol * (0.3 + 0.8 * l) * (1.0 - e * 0.35); gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`);
   { // sandbag parapets either side of every trench, two layers
     const bags = []; for (const tz of BT.trenches) for (const sd of [-1, 1]) for (let l = 0; l < 2; l++) for (let x = -40 + l * 0.55; x < 40; x += 1.15) bags.push([x, 0.175 + l * 0.35, tz + sd * (BT.tw + 0.45)]);
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 0.35, 0.6), btBoxMat, bags.length);
-    const cA = new C3(0x3d8a4a), cB = new C3(0x5fb86a);
+    const cA = new C3(0x8a7a40), cB = new C3(0x6e6230);
     bags.forEach(([x, y, z], i) => { dummy.position.set(x, y, z); dummy.rotation.set(0, rand(-0.08, 0.08), 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, Math.random() < 0.5 ? cA : cB); });
     dummy.rotation.set(0, 0, 0); im.frustumCulled = false; battle.add(im);
   }
-  { // barbed wire following the ground: posts and coils with a couple of gaps per line
-    const pts = [], posts = [];
+  // thorns (Lawnmower Man): long dark spikes with pale tips, in hedges where the wire lines run (with gaps) and in loose thickets
+  const thornMat = shader({ ...U }, `void main(){ vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); float l = abs(dot(n, normalize(vec3(0.25, 0.6, -0.75))));
+    vec3 col = mix(vec3(0.10, 0.06, 0.03), vec3(0.85, 0.62, 0.30), smoothstep(0.35, 1.0, vUv.y)) * (0.35 + 0.85 * l); gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`);
+  const thickets = []; // [x, z, r] for the loose ones you can blunder into
+  {
+    const geo = new THREE.ConeGeometry(1, 1, 4, 1); geo.translate(0, 0.5, 0);
+    const spikes = [], add = (x, z, n, reach) => { for (let k = 0; k < n; k++) spikes.push([x + rand(-reach, reach), z + rand(-0.6, 0.6), rand(0.06, 0.12), rand(1.8, 4.2), rand(-1.25, 1.25), rand(0, TAU)]); };
     for (const wz of BT.wires) {
       const g = [rand(-18, -9), rand(-4, 4), rand(9, 18)].map((c) => [c - 1.8, c + 1.8]); BT.gaps.push(g);
-      for (let x = -40; x < 40; x += 3) {
-        if (g.some(([a, b]) => x + 3 > a && x < b)) continue;
-        posts.push([x, wz]);
-        for (let k = 0; k < 6; k++) { const xa = x + k * 0.5, xb = xa + 0.5, ya = terrain(xa, wz), yb = terrain(xb, wz); pts.push(xa, ya + 0.2 + (k % 2) * 0.7, wz + 0.25, xb, yb + 0.9 - (k % 2) * 0.7, wz - 0.25, xa, ya + 0.5, wz - 0.3, xb, yb + 0.55, wz + 0.3); }
+      for (let x = -40; x < 40; x += 1.3) if (!g.some(([a, b]) => x > a - 0.4 && x < b + 0.4)) add(x, wz, 4, 0.5);
+    }
+    for (let i = 0; i < 90; i++) {
+      let z; do { z = rand(BT.bz + 30, -14); } while (BT.trenches.some((tz) => Math.abs(z - tz) < 7) || BT.wires.some((wz) => Math.abs(z - wz) < 5));
+      const x = (Math.random() < 0.35 ? rand(-BT.hw, BT.hw) : (Math.random() < 0.5 ? -1 : 1) * rand(BT.hw - 4, 45)), r = rand(1.4, 2.6);
+      add(x, z, 12, r); if (Math.abs(x) < BT.hw + 1) thickets.push([x, z, r * 0.8]);
+    }
+    const im = new THREE.InstancedMesh(geo, thornMat, spikes.length);
+    spikes.forEach(([x, z, rr, len, tilt, yaw], i) => { dummy.position.set(x, terrain(x, z) - 0.1, z); dummy.rotation.set(tilt, yaw, 0, "YXZ"); dummy.scale.set(rr, len, rr); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); });
+    dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1); im.frustumCulled = false; battle.add(im);
+  }
+  // spiked sea-mine spheres and green pipes lying about (they hurt if you walk into the spheres)
+  const seaMines = [];
+  {
+    const tealMat = new THREE.MeshPhongMaterial({ color: 0x1a7c7a, emissive: 0x032220, specular: 0x88ffee, shininess: 60, flatShading: true });
+    const pipeMat = new THREE.MeshPhongMaterial({ color: 0x2e7a3a, emissive: 0x061a08, specular: 0xaaffaa, shininess: 50, flatShading: true });
+    const tipMat = new THREE.MeshPhongMaterial({ color: 0xc9a248, emissive: 0x2a1c00, flatShading: true });
+    const ball = new THREE.IcosahedronGeometry(1.1, 0), spike = new THREE.ConeGeometry(0.12, 1.5, 4); spike.translate(0, 1.6, 0);
+    const pipe = new THREE.CylinderGeometry(0.42, 0.42, 9, 8), ringG = new THREE.TorusGeometry(0.62, 0.14, 4, 12), cap = new THREE.ConeGeometry(0.42, 1.2, 6);
+    const bm = new THREE.InstancedMesh(ball, tealMat, 30), sm = new THREE.InstancedMesh(spike, tipMat, 30 * 14), pm = new THREE.InstancedMesh(pipe, pipeMat, 40), rm = new THREE.InstancedMesh(ringG, tealMat, 80), cm = new THREE.InstancedMesh(cap, tipMat, 80);
+    const dirs = []; for (let k = 0; k < 14; k++) { const y = 1 - (2 * (k + 0.5)) / 14, r = Math.sqrt(1 - y * y), a = k * 2.399963; dirs.push(new V3(Math.cos(a) * r, y, Math.sin(a) * r)); }
+    const spot = () => { let z; do { z = rand(BT.bz + 30, -20); } while (BT.trenches.some((tz) => Math.abs(z - tz) < 6) || BT.wires.some((wz) => Math.abs(z - wz) < 4)); return z; };
+    for (let i = 0; i < 30; i++) {
+      const z = spot(), x = rand(-BT.hw - 10, BT.hw + 10), y = terrain(x, z) + 1.0;
+      dummy.position.set(x, y, z); dummy.rotation.set(rand(0, 3), rand(0, 3), 0); dummy.scale.setScalar(1); dummy.updateMatrix(); bm.setMatrixAt(i, dummy.matrix);
+      dirs.forEach((d, k) => { dummy.quaternion.setFromUnitVectors(new V3(0, 1, 0), d); dummy.position.set(x, y, z); dummy.updateMatrix(); sm.setMatrixAt(i * 14 + k, dummy.matrix); });
+      seaMines.push([x, z, y]);
+    }
+    for (let i = 0; i < 40; i++) {
+      const z = spot(), x = rand(-BT.hw - 14, BT.hw + 14), yaw = rand(0, TAU), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 + rand(-0.15, 0.15), yaw, 0, "YXZ"));
+      const ax = new V3(0, 1, 0).applyQuaternion(q), y = terrain(x, z) + 0.45;
+      dummy.position.set(x, y, z); dummy.quaternion.copy(q); dummy.updateMatrix(); pm.setMatrixAt(i, dummy.matrix);
+      for (const [k, sgn] of [[0, 1], [1, -1]]) {
+        dummy.position.set(x + ax.x * 3.2 * sgn, y + ax.y * 3.2 * sgn, z + ax.z * 3.2 * sgn); dummy.quaternion.copy(q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0))); dummy.updateMatrix(); rm.setMatrixAt(i * 2 + k, dummy.matrix);
+        dummy.position.set(x + ax.x * 5.1 * sgn, y + ax.y * 5.1 * sgn, z + ax.z * 5.1 * sgn); dummy.quaternion.copy(q); if (sgn < 0) dummy.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0))); dummy.updateMatrix(); cm.setMatrixAt(i * 2 + k, dummy.matrix);
       }
     }
-    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    battle.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x9fffb0, transparent: true, opacity: 0.55 })));
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 1.2, 0.1), btBoxMat, posts.length);
-    posts.forEach(([x, z], i) => { dummy.position.set(x, terrain(x, z) + 0.6, z); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, new C3(0x7fdc8a)); });
-    im.frustumCulled = false; battle.add(im);
-  }
-  { // tank traps, decoration only
-    const hog = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 0.25, 2.2), btBoxMat, 300);
-    for (let i = 0; i < 100; i++) {
-      let z; do { z = rand(BT.bz + 20, -10); } while (Math.abs(z - BT.trenches.reduce((a, b) => (Math.abs(z - b) < Math.abs(z - a) ? b : a))) < 5);
-      const x = (Math.random() < 0.5 ? -1 : 1) * rand(6, 32), y = terrain(x, z) + 0.75;
-      for (let k = 0; k < 3; k++) { dummy.position.set(x, y, z); dummy.rotation.set([0.6, 0, -0.6][k], [0, 1.57, 0][k], k === 1 ? 0.6 : 0); dummy.scale.setScalar(1); dummy.updateMatrix(); hog.setMatrixAt(i * 3 + k, dummy.matrix); hog.setColorAt(i * 3 + k, new C3(0x6fbf7a)); }
-    }
     dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1);
-    hog.frustumCulled = false; battle.add(hog);
+    [bm, sm, pm, rm, cm].forEach((m) => { m.frustumCulled = false; battle.add(m); });
   }
   // the satellite uplink bunker: a concrete block laid out from a map (3 m cells), a dish and antennas on the roof,
   // corridors with guards (G), ceiling turrets (T) and tripwires (L), and the mainframe room (M cabinets, J the jack port)
@@ -896,29 +955,37 @@
   const JACK = new V3(bunkerSpots.J[0], 2.4, BT.bz - (BROWS - 1) * BC + 0.2); // the port on the back wall of the mainframe room
   const jackPort = makePortal(0x35e6ff, 1.5); jackPort.position.copy(JACK);
   // threats: soldiers popping up in trenches, machine-gun nests, a tank
-  const redFill = new THREE.MeshPhongMaterial({ color: 0x8a1020, emissive: 0x2a0006, flatShading: true }), redEdge = new THREE.LineBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: 0.95, blending: ADD, depthWrite: false });
+  // the sim's enemies: squat gold walkers (Lawnmower Man), steel gatlings
+  const goldFill = new THREE.MeshPhongMaterial({ color: 0xe8b81c, emissive: 0x3a2800, specular: 0xffe08a, shininess: 40, flatShading: true }), goldEdge = new THREE.LineBasicMaterial({ color: 0x4a2e00, transparent: true, opacity: 0.85 });
+  const steelFill = new THREE.MeshPhongMaterial({ color: 0x9aa2ab, emissive: 0x111418, specular: 0xffffff, shininess: 90, flatShading: true }), steelEdge = new THREE.LineBasicMaterial({ color: 0x23272c });
+  const sandFill = new THREE.MeshPhongMaterial({ color: 0x55641c, emissive: 0x101400, flatShading: true }), sandEdge = new THREE.LineBasicMaterial({ color: 0x1a2006 });
+  const B3 = (w, h, d) => new THREE.BoxGeometry(w, h, d);
   const soldierGeo = mergeGeos([
-    [new THREE.BoxGeometry(0.22, 0.85, 0.25), mat4(-0.13, 0.425, 0)], [new THREE.BoxGeometry(0.22, 0.85, 0.25), mat4(0.13, 0.425, 0)],
-    [new THREE.BoxGeometry(0.56, 0.66, 0.32), mat4(0, 1.18, 0)], [new THREE.IcosahedronGeometry(0.16, 0), mat4(0, 1.66, 0)],
-    [new THREE.CylinderGeometry(0.2, 0.25, 0.12, 7), mat4(0, 1.78, 0)], [new THREE.BoxGeometry(0.09, 0.1, 0.95), mat4(0.2, 1.28, 0.38)],
-    [new THREE.BoxGeometry(0.12, 0.5, 0.12), mat4(0.25, 1.2, 0.12, -1.1)], [new THREE.BoxGeometry(0.12, 0.5, 0.12), mat4(-0.18, 1.22, 0.2, -1.3, 0.4)],
+    [B3(0.62, 0.42, 0.5), mat4(0, 1.32, 0.02)], [B3(0.36, 0.22, 0.34), mat4(0, 1.62, 0.05)], [B3(0.3, 0.06, 0.05), mat4(0, 1.64, 0.24)], [B3(0.5, 0.18, 0.36), mat4(0, 1.02, 0)],
+    [B3(0.16, 0.5, 0.18), mat4(-0.32, 0.82, 0, 0, 0, 0.55)], [B3(0.16, 0.5, 0.18), mat4(0.32, 0.82, 0, 0, 0, -0.55)],
+    [B3(0.14, 0.62, 0.16), mat4(-0.46, 0.33, 0, 0, 0, -0.25)], [B3(0.14, 0.62, 0.16), mat4(0.46, 0.33, 0, 0, 0, 0.25)],
+    [B3(0.26, 0.08, 0.36), mat4(-0.5, 0.04, 0.05)], [B3(0.26, 0.08, 0.36), mat4(0.5, 0.04, 0.05)],
+    [B3(0.2, 0.2, 0.2), mat4(-0.42, 1.42, 0)], [B3(0.2, 0.2, 0.2), mat4(0.42, 1.42, 0)],
+    [B3(0.14, 0.14, 0.55), mat4(-0.46, 1.3, 0.25)], [B3(0.14, 0.14, 0.55), mat4(0.46, 1.3, 0.25)],
+    [B3(0.07, 0.07, 0.3), mat4(-0.46, 1.3, 0.62)], [B3(0.07, 0.07, 0.3), mat4(0.46, 1.3, 0.62)],
   ]);
   const nestGeo = mergeGeos([[new THREE.TorusGeometry(1.25, 0.38, 4, 10), mat4(0, 0.38, 0, Math.PI / 2)], [new THREE.CylinderGeometry(0.06, 0.06, 1, 4), mat4(0, 0.5, 0)]]);
-  const mgGeo = mergeGeos([[new THREE.BoxGeometry(0.28, 0.28, 0.7), mat4(0, 0, 0)], [new THREE.BoxGeometry(0.1, 0.1, 1.3), mat4(0, 0.03, 0.9)], [new THREE.BoxGeometry(0.4, 0.4, 0.06), mat4(0, 0.1, 0.3)]]);
+  const mgGeo = mergeGeos([[B3(0.34, 0.3, 0.5), mat4(0, 0, 0)], [new THREE.CylinderGeometry(0.15, 0.15, 0.1, 10), mat4(0, 0, 0.32, Math.PI / 2)], [new THREE.CylinderGeometry(0.15, 0.15, 0.1, 10), mat4(0, 0, 1.1, Math.PI / 2)],
+    ...[0, 1, 2, 3, 4, 5].map((k) => [new THREE.CylinderGeometry(0.03, 0.03, 1.1, 5), mat4(Math.cos((k * TAU) / 6) * 0.1, Math.sin((k * TAU) / 6) * 0.1, 0.8, Math.PI / 2)])]); // a gatling
   const tankGeo = mergeGeos([[new THREE.BoxGeometry(3.2, 1.0, 5), mat4(0, 0.85, 0)], [new THREE.BoxGeometry(0.75, 0.95, 5.5), mat4(-1.8, 0.48, 0)], [new THREE.BoxGeometry(0.75, 0.95, 5.5), mat4(1.8, 0.48, 0)], [new THREE.BoxGeometry(3.4, 0.25, 1.4), mat4(0, 1.2, 2.3, 0.35)]]);
   const turretGeo = mergeGeos([[new THREE.BoxGeometry(1.9, 0.8, 2.1), mat4(0, 0, 0)], [new THREE.CylinderGeometry(0.13, 0.16, 2.8, 6), mat4(0, 0.05, 2.3, Math.PI / 2)]]);
-  function threatHull(geo) { const g = new THREE.Group(); g.add(new THREE.Mesh(geo, redFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 15), redEdge)); return g; }
+  function threatHull(geo, fill = goldFill, edge = goldEdge) { const g = new THREE.Group(); g.add(new THREE.Mesh(geo, fill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 15), edge)); return g; }
   const threats = [];
   {
     const add = (kind, x, z, guard) => {
       const g = new THREE.Group(); battle.add(g);
       const T = { kind, x, z, guard, g, on: true, hp: 0, max: 0, st: "down", t: rand(0, 2), fireT: rand(0.5, 2), up: 0, burst: 0, flash: 0, ph: rand(0, TAU) };
       if (kind === "soldier") { T.body = threatHull(soldierGeo); g.add(T.body); T.max = 2; }
-      if (kind === "mg") { g.add(threatHull(nestGeo)); T.gun = threatHull(mgGeo); T.gun.position.y = 1.05; g.add(T.gun); T.max = 6; g.position.set(x, terrain(x, z), z); }
+      if (kind === "mg") { g.add(threatHull(nestGeo, sandFill, sandEdge)); T.gun = threatHull(mgGeo, steelFill, steelEdge); T.gun.position.y = 1.05; g.add(T.gun); T.max = 6; g.position.set(x, terrain(x, z), z); }
       if (kind === "rec") { const h = new THREE.Group(); h.add(new THREE.Mesh(recGeo, recFill)); h.add(new THREE.LineSegments(new THREE.EdgesGeometry(recGeo, 15), recEdge)); g.add(h); T.max = 16; T.trig = z; }
       if (kind === "guard") { T.body = threatHull(soldierGeo); g.add(T.body); T.max = 3; g.position.set(x, 0, z); }
-      if (kind === "turret") { g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 6), redFill).translateY(4.6)); T.gun = threatHull(mgGeo); T.gun.position.y = 4.05; g.add(T.gun); T.max = 4; g.position.set(x, 0, z); }
-      if (kind === "tank") { g.add(threatHull(tankGeo)); T.gun = threatHull(turretGeo); T.gun.position.y = 1.75; g.add(T.gun); T.max = 14; T.amp = rand(10, BT.hw - 3); }
+      if (kind === "turret") { g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 6), steelFill).translateY(4.6)); T.gun = threatHull(mgGeo, steelFill, steelEdge); T.gun.position.y = 4.05; g.add(T.gun); T.max = 4; g.position.set(x, 0, z); }
+      if (kind === "tank") { g.add(threatHull(tankGeo, sandFill, sandEdge)); T.gun = threatHull(turretGeo, goldFill, goldEdge); T.gun.position.y = 1.75; g.add(T.gun); T.max = 14; T.amp = rand(10, BT.hw - 3); }
       T.hp = T.max; threats.push(T);
     };
     const line = (i, xs, mgs, guard) => { const tz = BT.trenches[i]; xs.forEach((x) => add("soldier", x, tz + 1.1, guard)); mgs.forEach((x) => add("mg", x, tz - BT.tw - 2.2, guard)); };
@@ -933,8 +1000,11 @@
   }
   // HUD: brackets on every threat, a waypoint over the bunker
   const BRK = (() => { const p = [], c = [[-1, -1], [1, -1], [1, 1], [-1, 1]]; for (const [x, y] of c) { p.push(x, y, 0, x * 0.45, y, 0, x, y, 0, x, y * 0.45, 0); } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(p.map((v) => v * 0.5), 3)); return g; })();
-  const BRC = Array.from(BRK.attributes.position.array); // 16 corner-line vertices of a unit bracket
-  const brPos = new Float32Array(threats.length * 48), brCol = new Float32Array(threats.length * 48), brGeo = new THREE.BufferGeometry();
+  const BRC = []; // a unit reticle: 24-segment ellipse, then two small triangles (the markers)
+  for (let i = 0; i < 24; i++) { const a0 = (i / 24) * TAU, a1 = ((i + 1) / 24) * TAU; BRC.push(Math.cos(a0) * 0.55, Math.sin(a0) * 0.42, 0, Math.cos(a1) * 0.55, Math.sin(a1) * 0.42, 0); }
+  for (const sy of [1, -1]) { const y0 = sy * 0.5, y1 = sy * 0.62; BRC.push(-0.06, y1, 0, 0.06, y1, 0, 0.06, y1, 0, 0, y0, 0, 0, y0, 0, -0.06, y1, 0); }
+  const BRV = BRC.length / 3, BRING = 48;
+  const brPos = new Float32Array(threats.length * BRV * 3), brCol = new Float32Array(threats.length * BRV * 3), brGeo = new THREE.BufferGeometry();
   brGeo.setAttribute("position", new THREE.BufferAttribute(brPos, 3)); brGeo.setAttribute("color", new THREE.BufferAttribute(brCol, 3));
   const bracketLines = new THREE.LineSegments(brGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: ADD, depthTest: false, depthWrite: false, fog: false }));
   bracketLines.renderOrder = 30; bracketLines.frustumCulled = false; bracketLines.visible = false; runScene.add(bracketLines);
@@ -1004,7 +1074,7 @@
       const z0 = lerp(-20, BT.bz + 20, i / 10), z1 = lerp(-20, BT.bz + 20, (i + 1) / 10), band = craters.filter((b) => b.z < z0 && b.z > z1), lines = BT.trenches.filter((tz) => tz < z0 + 10 && tz > z1 - 10 && tz < 0);
       if ((Math.random() < 0.6 && lines.length) || !band.length) { z = (lines.length ? lines[(Math.random() * lines.length) | 0] : BT.trenches[1]) + rand(-1, 1); x = rand(-BT.hw + 2, BT.hw - 2); }
       else { const b = band[(Math.random() * band.length) | 0]; x = b.x; z = b.z; }
-      const c = makeConstruct({ hue: 0.09 }); c.body.rotation.x = 0; c.root.visible = false; battle.add(c.root);
+      const c = makeConstruct({ hue: 0.52 }); c.body.rotation.x = 0; // ours are cyan, theirs are gold c.root.visible = false; battle.add(c.root);
       const tag = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false })); tag.position.y = 2.15; c.root.add(tag);
       friendlies.push({ c, tag, x0: x, z0: z, x, z, st: "held", t: 0, ph: rand(0, TAU) });
     }
@@ -1563,6 +1633,37 @@
   const vrTitle = canvasPlane(1024, 400, 4.2);
   const vrBrief = canvasPlane(1024, 600, 2.4);
   const vrCount = canvasPlane(1024, 240, 0.62); vrCount.m.renderOrder = 60;
+  // the battlefield visor (Lawnmower Man): THREAT across the top, a stack of triangles for integrity,
+  // the biohazard mark, and a little gold walker for each threat in view. A screen overlay, or head-locked in VR.
+  const visorCv = document.createElement("canvas"); visorCv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:33;display:none"; document.body.appendChild(visorCv);
+  const vrVisor = canvasPlane(1024, 576, 2.0); vrVisor.m.renderOrder = 55;
+  const VIS = { key: "" };
+  function drawVisor(g, W, H, n, integ, low = H * 0.9) { // low: where the bottom marks sit (above the screen HUD on a monitor)
+    g.clearRect(0, 0, W, H); g.textAlign = "center"; g.textBaseline = "alphabetic";
+    if (n > 0) { const fs = Math.round(H * 0.11); g.font = `${fs}px 'Archivo Black', 'Arial Black', Impact, sans-serif`; g.lineWidth = Math.max(2, fs / 18); g.strokeStyle = "rgba(0,20,10,0.8)"; g.strokeText("THREAT", W * 0.5, H * 0.15); g.fillStyle = "#2fd49a"; g.fillText("THREAT", W * 0.5, H * 0.15); }
+    const x0 = W * 0.05, top = H * 0.3, step = Math.max(8, (low - H * 0.36) / 8), lit = Math.ceil(integ / 12.5), cols = ["#f2c8e8", "#2fd49a", "#9ff0c8", "#c8a0e8"];
+    for (let i = 0; i < 8; i++) { // integrity, filled from the bottom
+      const y = top + (7 - i) * step; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + step * 0.85, y + step / 2); g.lineTo(x0, y + step); g.closePath();
+      if (i < lit) { g.fillStyle = cols[i % 4]; g.fill(); } else { g.strokeStyle = "rgba(160,200,190,0.35)"; g.lineWidth = 2; g.stroke(); }
+    }
+    const bx = W * 0.07, by = low, r = Math.min(H * 0.032, 26); g.strokeStyle = "#35e6ff"; g.lineWidth = Math.max(2, r / 5); // biohazard
+    for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + (k * TAU) / 3; g.beginPath(); g.arc(bx + Math.cos(a) * r * 0.55, by + Math.sin(a) * r * 0.55, r * 0.6, a + 0.9, a - 0.9 + TAU); g.stroke(); }
+    g.beginPath(); g.arc(bx, by, r * 0.38, 0, TAU); g.stroke();
+    for (let i = 0; i < Math.min(n, 6); i++) { // a gold walker per threat in view
+      const u = Math.min(H * 0.012, 10), cx = W * 0.94 - i * u * 4.2, cy = low; g.fillStyle = "#f2c21a";
+      g.fillRect(cx - u * 1.3, cy - u * 2.2, u * 2.6, u * 1.6); g.fillRect(cx - u * 0.7, cy - u * 3.2, u * 1.4, u); g.fillRect(cx - u * 2, cy - u * 1.9, u * 0.6, u * 1.2); g.fillRect(cx + u * 1.4, cy - u * 1.9, u * 0.6, u * 1.2);
+      g.fillRect(cx - u * 1.3, cy - u * 0.6, u * 0.6, u * 1.6); g.fillRect(cx + u * 0.7, cy - u * 0.6, u * 0.6, u * 1.6);
+    }
+  }
+  function updateVisor(on, n = 0, integ = 100) {
+    const xr = renderer.xr.isPresenting;
+    visorCv.style.display = on && !xr ? "block" : "none"; vrVisor.m.visible = on && xr;
+    if (!on) { VIS.key = ""; return; }
+    if (xr) { vrVisor.m.quaternion.copy(camera.quaternion); vrVisor.m.position.set(0, -0.02, -1.25).applyQuaternion(camera.quaternion).add(camera.position); }
+    const key = `${Math.min(n, 6)}|${Math.ceil(integ / 12.5)}|${xr}|${innerWidth}x${innerHeight}`; if (key === VIS.key) return; VIS.key = key;
+    if (xr) { drawVisor(vrVisor.g, 1024, 576, n, integ); vrVisor.tex.needsUpdate = true; }
+    else { visorCv.width = innerWidth; visorCv.height = innerHeight; drawVisor(visorCv.getContext("2d"), innerWidth, innerHeight, n, integ, innerHeight - Math.max(150, innerHeight * 0.2)); }
+  }
   // the self-destruct countdown: starts when the core dies and runs through the escape (it pauses for briefings)
   const SELF = { t: null, shown: "" };
   function escapeEstimate() { const home = BT.trenches[Math.max(1, BT.trenches.length - 4)]; return Math.round((75 + Math.abs(home - BT.bz)) / 5 + 30); } // the bunker's corridors, then the field home, at an easy run, plus a margin
@@ -1808,7 +1909,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false;
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false);
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -1827,7 +1928,7 @@
     cage: { fog: 0x12020a, dens: 0.012, a: 0xff2a3a, b: 0x3a0010, world: false },
     poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
     uplink: { fog: 0x02060f, dens: 0.02, a: 0x35e6ff, b: 0x7a5cff, world: false },
-    battle: { fog: 0x03140a, dens: 0.016, a: 0x2f8f4a, b: 0x9fff9a, world: false },
+    battle: { fog: 0x3a1a08, dens: 0.0085, a: 0x2f8f4a, b: 0x9fff9a, world: false },
     gauntlet: { fog: 0x07021a, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
   };
   function setEnv(name) {
@@ -1836,6 +1937,7 @@
     tunnel.visible = name === "tunnel"; cage.visible = name === "cage"; polyGroup.visible = name === "poly";
     corridor.visible = spikeMesh.visible = name === "gauntlet";
     battle.visible = name === "battle"; uplink.visible = name === "uplink";
+    sky.material.uniforms.uBand.value = name === "battle" ? 1 : 0; mountains.visible = name === "battle";
     R.fogBase.set(e.fog); R.floorA.set(e.a); R.floorB.set(e.b);
     runScene.fog.color.copy(R.fogBase); runScene.fog.density = U.uFogDensity.value = e.dens;
     if (e.world) { reseedTowers(A.z); reseedStreaks(A.z); }
@@ -2454,8 +2556,12 @@
         // barbed wire: slows you and cuts you unless you find a gap
         if (live && !jack) BT.wires.forEach((wz, i) => {
           if (Math.abs(A.z - wz) > 0.7 || A.y - R.gy > 0.7 || BT.gaps[i].some(([a, b]) => A.x > a + 0.3 && A.x < b - 0.3)) return;
-          R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(8, "BARBED WIRE", A.x, A.y, A.z); }
+          R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(8, "THORNS", A.x, A.y, A.z); }
         });
+        if (live && !jack && A.y - R.gy < 0.7) {
+          for (const [x, z, r] of thickets) if (Math.abs(A.z - z) < r && Math.hypot(A.x - x, A.z - z) < r) { R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(8, "THORNS", A.x, A.y, A.z); } break; }
+          for (const [x, z] of seaMines) if (Math.abs(A.z - z) < 2.2 && Math.hypot(A.x - x, A.z - z) < 2.2 && R.wireHit <= 0) { R.wireHit = 1; damage(25, "SPIKED", A.x, A.y, A.z); }
+        }
         // tripwires in the bunker: jump them, or the alarm goes and every guard and turret fires faster
         R.alarm = Math.max(0, R.alarm - dt);
         for (const w of tripwires) {
@@ -2679,16 +2785,17 @@
           if (indoor ? !losClear(T.x, T.z, A.x, A.z) : inBunker) return; // the HUD can't see through bunker walls or its roof
           const cy = T.g.position.y + (T.kind === "soldier" || T.kind === "guard" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : T.kind === "turret" ? 4.05 : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
           const cx = T.g.position.x, cz = T.z, k = Math.max(sz, Math.hypot(cx - camW.x, cy - camW.y, cz - camW.z) * 0.045);
-          brC.set(T.flash > 0 ? 0xffffff : T.guard ? 0xffc24a : 0xff3a5c).multiplyScalar(T.kind === "soldier" && T.up < 0.5 ? 0.3 : 0.65 + 0.35 * Math.sin(t * 8 + i));
-          for (let v = 0; v < 16; v++) {
-            const px = BRC[v * 3] * k, py = BRC[v * 3 + 1] * k, o = (nb * 16 + v) * 3;
+          const dim = T.kind === "soldier" && T.up < 0.5 ? 0.3 : 0.75 + 0.25 * Math.sin(t * 8 + i);
+          brC.set(T.flash > 0 ? 0xffffff : T.guard ? 0xffb030 : 0xffdc8a).multiplyScalar(dim);
+          for (let v = 0; v < BRV; v++) {
+            const px = BRC[v * 3] * k, py = BRC[v * 3 + 1] * k, o = (nb * BRV + v) * 3, ring = v < BRING;
             brPos[o] = cx + e[0] * px + e[4] * py; brPos[o + 1] = cy + e[1] * px + e[5] * py; brPos[o + 2] = cz + e[2] * px + e[6] * py;
-            brCol[o] = brC.r; brCol[o + 1] = brC.g; brCol[o + 2] = brC.b;
+            brCol[o] = ring ? brC.r : 0.25 * dim; brCol[o + 1] = ring ? brC.g : 0.45 * dim; brCol[o + 2] = ring ? brC.b : 1.0 * dim;
           }
           if (!T.seen) { T.seen = true; Sound.say("threat"); } // first sight of each threat: the voice names it (when it isn't busy)
           nb++;
         });
-        brGeo.setDrawRange(0, nb * 16); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
+        brGeo.setDrawRange(0, nb * BRV); updateVisor(true, nb, R.integrity, t); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
         if (R.stage === "home" || R.stage === "out") { // going home: the waypoint marks our lines
           const wd = Math.max(0, R.homeZ - A.z);
           waypoint.m.visible = live && !R.over; waypoint.m.position.set(0, groundAt(0, R.homeZ) + 7.5, R.homeZ); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
@@ -3645,6 +3752,7 @@
       deathStep(dt, t);
       R.L.update(dt, t);
       sky.position.set(rig.position.x, 0, rig.position.z); // the dome travels with you (levels run well past its radius)
+      if (mountains.visible) mountains.position.set(rig.position.x, 0, rig.position.z);
       shootStep(dt);
       updateBolts(dt);
       updateFx(dt);
