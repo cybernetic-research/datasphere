@@ -712,7 +712,7 @@
     for (let i = 0; i < trenches.length - 1; i++) {
       const a = trenches[i], b = trenches[i + 1], n = i === 0 ? 1 : Math.random() < 0.5 ? 2 : 1;
       for (let k = 0; k < n; k++) wires.push(Math.round(lerp(a - 12, b + 12, (k + 0.5 + rand(-0.2, 0.2)) / n)));
-      if (i >= 2 && (i % 2 === 0 || i === trenches.length - 2)) tanks.push(Math.round(lerp(a, b, rand(0.55, 0.7))));
+      if (i >= 1) tanks.push(Math.round(lerp(a, b, rand(0.55, 0.7))));
     }
     return { trenches, wires, tanks, tw: 2, depth: 2.2, hw: 21, bz: trenches[trenches.length - 1] - 42, bd: 12, gaps: [] };
   })();
@@ -868,22 +868,22 @@
   // corridors with guards (G), ceiling turrets (T) and tripwires (L), and the mainframe room (M cabinets, J the jack port)
   const BMAP = [
     "######D######",
-    "#...#...#...#",
+    "#.G.#.W.#.G.#",
     "#.G.#...#.T.#",
-    "#...##.##...#",
-    "#.....L.....#",
+    "#W..##.##..W#",
+    "#.G...L...G.#",
     "###.#####.###",
-    "#...#...#...#",
+    "#.T.#.G.#.T.#",
     "#.G.#.T.#.G.#",
-    "#...........#",
+    "#W.G.....G.W#",
     "#####.#.#####",
     "#T....L....T#",
     "#.####.####.#",
-    "#.#.......#.#",
-    "#.#.G...G.#.#",
-    "#...........#",
+    "#.#.T...T.#.#",
+    "#.#.G.W.G.#.#",
+    "#.G.......G.#",
     "####.###.####",
-    "#MMM.....MMM#",
+    "#MMMG...GMMM#",
     "#MMM..J..MMM#",
     "#############",
   ];
@@ -903,12 +903,13 @@
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`);
   const bunker = new THREE.Group(); battle.add(bunker);
-  const tripwires = [], bunkerSpots = { G: [], T: [], J: null };
+  const tripwires = [], bunkerSpots = { G: [], T: [], W: [], J: null };
   {
     const parts = [];
     BMAP.forEach((row, r) => [...row].forEach((ch, c) => {
       if (ch === "#") parts.push([new THREE.BoxGeometry(BC, 5, BC), mat4(cellX(c), 2.5, cellZ(r))]);
       if (ch === "G" || ch === "T") bunkerSpots[ch].push([cellX(c), cellZ(r)]);
+      if (ch === "W") bunkerSpots.W.push([cellX(c), cellZ(r)]); // wall guns: lower down, at chest height
       if (ch === "J") bunkerSpots.J = [cellX(c), cellZ(r)];
     }));
     parts.push([new THREE.BoxGeometry(BCOLS * BC + 1.6, 0.8, BROWS * BC + 1.6), mat4(0, 5.4, BT.bz - (BROWS * BC) / 2)]); // roof
@@ -1017,7 +1018,7 @@
       if (kind === "mg") { g.add(threatHull(nestGeo, sandFill, sandEdge)); T.gun = threatHull(mgGeo, steelFill, steelEdge); T.gun.position.y = 1.05; g.add(T.gun); T.max = 6; g.position.set(x, terrain(x, z), z); }
       if (kind === "rec") { const h = new THREE.Group(); h.add(new THREE.Mesh(recGeo, recFill)); h.add(new THREE.LineSegments(new THREE.EdgesGeometry(recGeo, 15), recEdge)); g.add(h); T.max = 16; T.trig = z; }
       if (kind === "guard") { T.body = threatHull(soldierGeo); g.add(T.body); T.max = 3; g.position.set(x, 0, z); }
-      if (kind === "turret") { g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 6), steelFill).translateY(4.6)); T.gun = threatHull(mgGeo, steelFill, steelEdge); T.gun.position.y = 4.05; g.add(T.gun); T.max = 4; g.position.set(x, 0, z); }
+      if (kind === "turret") { g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 6), steelFill).translateY(4.6)); T.gun = threatHull(mgGeo, steelFill, steelEdge); T.gun.position.y = 4.05; g.add(T.gun); T.max = 4; T.hy = 4.05; g.position.set(x, 0, z); }
       if (kind === "tank") { g.add(threatHull(tankGeo, sandFill, sandEdge)); T.gun = threatHull(turretGeo, goldFill, goldEdge); T.gun.position.y = 1.75; g.add(T.gun); T.max = 14; T.amp = rand(10, BT.hw - 3); }
       T.hp = T.max; threats.push(T);
     };
@@ -1025,11 +1026,12 @@
     const last = BT.trenches.length - 1, spread = (n, w) => Array.from({ length: n }, (_, k) => lerp(-w, w, (k + 0.5) / n) + rand(-1.5, 1.5));
     for (let i = 1; i <= last; i++) { // lines get busier the deeper you go; the last one guards the bunker
       const p = (i - 1) / Math.max(1, last - 1);
-      line(i, spread(4 + Math.round(p * 4), BT.hw - 3), i === 1 ? [] : spread(1 + Math.round(p * 2), BT.hw - 6), i === last);
+      line(i, spread(6 + Math.round(p * 5), BT.hw - 3), spread(i === 1 ? 1 : 2 + Math.round(p * 2), BT.hw - 6), i === last);
     }
     BT.tanks.forEach((z, k) => add("tank", 0, z, k === BT.tanks.length - 1));
     bunkerSpots.G.forEach(([x, z]) => add("guard", x, z)); bunkerSpots.T.forEach(([x, z]) => add("turret", x, z)); // inside the bunker
-    for (let k = 0; k < 5; k++) add("rec", k % 2 ? 1 : -1, Math.round(lerp(-110, BT.bz + 120, k / 4))); // Recognizers from another grid, drifting in over the battlefield
+    bunkerSpots.W.forEach(([x, z]) => { add("turret", x, z); const T = threats[threats.length - 1]; T.hy = 2.1; T.gun.position.y = 2.1; T.g.children[0].visible = false; });
+    for (let k = 0; k < 7; k++) add("rec", k % 2 ? 1 : -1, Math.round(lerp(-90, BT.bz + 100, k / 6))); // Recognizers from another grid, drifting in over the battlefield
   }
   // HUD: brackets on every threat, a waypoint over the bunker
   const BRK = (() => { const p = [], c = [[-1, -1], [1, -1], [1, 1], [-1, 1]]; for (const [x, y] of c) { p.push(x, y, 0, x * 0.45, y, 0, x, y, 0, x, y * 0.45, 0); } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(p.map((v) => v * 0.5), 3)); return g; })();
@@ -1037,7 +1039,8 @@
   for (let i = 0; i < 24; i++) { const a0 = (i / 24) * TAU, a1 = ((i + 1) / 24) * TAU; BRC.push(Math.cos(a0) * 0.55, Math.sin(a0) * 0.42, 0, Math.cos(a1) * 0.55, Math.sin(a1) * 0.42, 0); }
   for (const sy of [1, -1]) { const y0 = sy * 0.5, y1 = sy * 0.62; BRC.push(-0.06, y1, 0, 0.06, y1, 0, 0.06, y1, 0, 0, y0, 0, 0, y0, 0, -0.06, y1, 0); }
   const BRV = BRC.length / 3, BRING = 48;
-  const brPos = new Float32Array(threats.length * BRV * 3), brCol = new Float32Array(threats.length * BRV * 3), brGeo = new THREE.BufferGeometry();
+  const MAXRET = threats.length + 12; // threats, plus the friendlies
+  const brPos = new Float32Array(MAXRET * BRV * 3), brCol = new Float32Array(MAXRET * BRV * 3), brGeo = new THREE.BufferGeometry();
   brGeo.setAttribute("position", new THREE.BufferAttribute(brPos, 3)); brGeo.setAttribute("color", new THREE.BufferAttribute(brCol, 3));
   const bracketLines = new THREE.LineSegments(brGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: ADD, depthTest: false, depthWrite: false, fog: false }));
   bracketLines.renderOrder = 30; bracketLines.frustumCulled = false; bracketLines.visible = false; runScene.add(bracketLines);
@@ -1083,9 +1086,9 @@
     });
   }
   // the bunker code: four digits scattered off the main path, in a violet nothing else on the battlefield uses
-  const KEY_COL = 0xd04dff, keyBeamMat = new THREE.MeshBasicMaterial({ color: KEY_COL, transparent: true, opacity: 0.45, blending: ADD, depthWrite: false });
+  const KEY_COL = 0xd04dff, keyBeamMat = new THREE.MeshBasicMaterial({ color: KEY_COL, transparent: true, opacity: 0.6, blending: ADD, depthWrite: false, fog: false }); // seen from far off
   const keyDigits = [0, 1, 2, 3].map((i) => {
-    let z, x; do { z = lerp(-60, BT.bz + 60, (i + rand(0.15, 0.85)) / 4); x = (Math.random() < 0.5 ? -1 : 1) * rand(7, BT.hw - 2); } while (BT.trenches.some((tz) => Math.abs(z - tz) < BT.tw + 3));
+    let z, x; do { z = lerp(-60, BT.bz + 60, (i + rand(0.15, 0.85)) / 4); x = (Math.random() < 0.5 ? -1 : 1) * rand(3, 11); } while (BT.trenches.some((tz) => Math.abs(z - tz) < BT.tw + 3));
     const g = new THREE.Group(), c = document.createElement("canvas"); c.width = c.height = 128; const tex = new THREE.CanvasTexture(c);
     const face = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
     const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.05, 0)), new THREE.LineBasicMaterial({ color: KEY_COL }));
@@ -1107,7 +1110,8 @@
       const z0 = lerp(-20, BT.bz + 20, i / 10), z1 = lerp(-20, BT.bz + 20, (i + 1) / 10), band = craters.filter((b) => b.z < z0 && b.z > z1), lines = BT.trenches.filter((tz) => tz < z0 + 10 && tz > z1 - 10 && tz < 0);
       if ((Math.random() < 0.6 && lines.length) || !band.length) { z = (lines.length ? lines[(Math.random() * lines.length) | 0] : BT.trenches[1]) + rand(-1, 1); x = rand(-BT.hw + 2, BT.hw - 2); }
       else { const b = band[(Math.random() * band.length) | 0]; x = b.x; z = b.z; }
-      const c = makeConstruct({ hue: 0.52 }); c.body.rotation.x = 0; // ours are cyan, theirs are gold c.root.visible = false; battle.add(c.root);
+      const c = makeConstruct({ hue: 0.52 }); c.body.rotation.x = 0; c.root.visible = false; battle.add(c.root); // ours are cyan, theirs are gold
+      const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 9, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false, transparent: true, opacity: 0.55, blending: ADD, depthWrite: false })); beacon.position.y = 6.5; c.root.add(beacon);
       const tag = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false })); tag.position.y = 2.15; c.root.add(tag);
       friendlies.push({ c, tag, x0: x, z0: z, x, z, st: "held", t: 0, ph: rand(0, TAU) });
     }
@@ -1131,9 +1135,9 @@
   const homeBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 60, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false, transparent: true, opacity: 0.5, blending: ADD, depthWrite: false })); homeBeam.visible = false; battle.add(homeBeam);
   function blast(p, max, dur, col) { const b = blasts.find((q) => !q.on) || blasts[0]; Object.assign(b, { on: true, t: 0, max, dur }); b.m.position.copy(p); b.m.material.color.set(col); b.m.visible = true; }
   // the odd Space Paranoid crossing overhead, dropping bombs; a ring marks where each one will land
-  const btShips = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
-  const bombs = [0, 1, 2, 3, 4, 5].map(() => { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xff8a1f })); b.visible = false; battle.add(b); return { b, on: false, x: 0, y: 0, z: 0, vy: 0, ring: null }; });
-  const mortars = [0, 1, 2, 3, 4, 5].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(2.7, 3.1, 28), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.visible = false; battle.add(m); return { m, on: false, x: 0, z: 0, t: 0 }; });
+  const btShips = [0, 1, 2, 3].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
+  const bombs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(() => { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xff8a1f })); b.visible = false; battle.add(b); return { b, on: false, x: 0, y: 0, z: 0, vy: 0, ring: null }; });
+  const mortars = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.0, 28), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.visible = false; battle.add(m); return { m, on: false, x: 0, z: 0, t: 0 }; });
   const flareGlow = (() => {
     const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
     r.addColorStop(0, "rgba(220,255,200,0.9)"); r.addColorStop(0.25, "rgba(140,255,150,0.35)"); r.addColorStop(1, "rgba(60,255,120,0)"); g.fillStyle = r; g.fillRect(0, 0, 128, 128);
@@ -1513,7 +1517,7 @@
     danger: "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VVVVTEFNRTQuMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NixG8AAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zYsRvAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FNC4wVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/82LEbwAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FNC4wVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NgxHAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTQuMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NixG8AAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zYsRvAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/82DEcAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FNC4wVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/82LEbwAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTQuMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NixG8AAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zYsRvAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/82DEcAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FNC4wVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/82LEbwAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTQuMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NixG8AAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zYsRvAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/82DEcAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=",
   };
   const Sound = (() => {
-    let ctx = null, master, music, fx, delay, padF, noise, next = 0, step = 0, muted = false, silenced = false, intensity = 0, alarmG, dist, voice, voiceBusy = 0;
+    let ctx = null, master, music, fx, delay, padF, noise, next = 0, step = 0, muted = false, silenced = false, intensity = 0, alarmG, dist, voice, voiceBusy = 0, voiceLvl = 1, humG, humF;
     const voiceBuf = {}, voiceLast = {}, VOICE_GAP = { threat: 9, friendly: 7, keyfound: 1, granted: 2.5, denied: 4, danger: 8 };
     const pads = [];
     const TRACKS = {
@@ -1541,7 +1545,10 @@
       master.connect(comp); comp.connect(ctx.destination);
       music = ctx.createGain(); music.gain.value = opts.music ? 1 : 0; music.connect(master);
       fx = ctx.createGain(); fx.connect(master);
-      voice = ctx.createGain(); voice.gain.value = 1.0; voice.connect(ctx.destination);
+      voice = ctx.createGain(); voice.gain.value = voiceLvl; voice.connect(ctx.destination);
+      humG = ctx.createGain(); humG.gain.value = 0; humF = ctx.createBiquadFilter(); humF.type = "lowpass"; humF.frequency.value = 300; humF.Q.value = 6; humF.connect(humG); humG.connect(fx); // the Recognizer drone
+      for (const [f, d] of [[55, 0], [55.7, 0], [110.4, 0]]) { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; o.detune.value = d; o.connect(humF); o.start(); }
+      const hl = ctx.createOscillator(), hg = ctx.createGain(); hl.frequency.value = 3.2; hg.gain.value = 120; hl.connect(hg); hg.connect(humF.frequency); hl.start();
       for (const [k, b64] of Object.entries(VOICE_CLIPS)) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); ctx.decodeAudioData(u.buffer).then((b) => (voiceBuf[k] = b)).catch(() => {}); }
       delay = ctx.createDelay(1); delay.delayTime.value = 0.4;
       const fb = ctx.createGain(); fb.gain.value = 0.36; const dl = ctx.createBiquadFilter(); dl.type = "lowpass"; dl.frequency.value = 2600;
@@ -1610,7 +1617,9 @@
         return true;
       },
       set intensity(v) { if (!Number.isFinite(v)) return; intensity = v; if (ctx) padF.frequency.setTargetAtTime(420 + v * 900, ctx.currentTime, 0.4); },
-      toggleMute() { if (!ctx) return; muted = !muted; master.gain.setTargetAtTime(muted ? 0 : 0.55, ctx.currentTime, 0.05); voice.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.05); },
+      toggleMute() { if (!ctx) return; muted = !muted; master.gain.setTargetAtTime(muted ? 0 : 0.55, ctx.currentTime, 0.05); voice.gain.setTargetAtTime(muted ? 0 : voiceLvl, ctx.currentTime, 0.05); },
+      voiceLevel(v) { voiceLvl = v; if (ctx && !muted) voice.gain.setTargetAtTime(v, ctx.currentTime, 0.1); },
+      recHum(k) { if (!ctx) return; humG.gain.setTargetAtTime(0.16 * k, ctx.currentTime, 0.2); humF.frequency.setTargetAtTime(240 + 900 * k, ctx.currentTime, 0.2); }, // louder and brighter as it closes
       musicOn() { musicLevel(); },
       silence(on) { silenced = on; musicLevel(); },
       alarm(on) { if (ctx) alarmG.gain.setTargetAtTime(on ? 0.035 : 0, ctx.currentTime, 0.1); },
@@ -1682,21 +1691,22 @@
   // the battlefield visor (Lawnmower Man): THREAT across the top, a stack of triangles for integrity,
   // the biohazard mark, and a little gold walker for each threat in view. A screen overlay, or head-locked in VR.
   const visorCv = document.createElement("canvas"); visorCv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:33;display:none"; document.body.appendChild(visorCv);
-  const vrVisor = canvasPlane(1024, 576, 2.0); vrVisor.m.renderOrder = 55;
+  const vrVisor = canvasPlane(1024, 576, 1.7); vrVisor.m.renderOrder = 55;
   const VIS = { key: "" };
-  function drawVisor(g, W, H, n, integ, low = H * 0.9) { // low: where the bottom marks sit (above the screen HUD on a monitor)
+  function drawVisor(g, W, H, n, integ, low = H * 0.9, xr = false) { // low: where the bottom marks sit; in the headset everything pulls in toward the middle
+    const inset = xr ? 0.22 : 0.08; if (xr) low = H * 0.76;
     g.clearRect(0, 0, W, H); g.textAlign = "center"; g.textBaseline = "alphabetic";
-    if (n > 0) { const fs = Math.round(H * 0.11); g.font = `${fs}px 'Archivo Black', 'Arial Black', Impact, sans-serif`; g.lineWidth = Math.max(2, fs / 18); g.strokeStyle = "rgba(0,20,10,0.8)"; g.strokeText("THREAT", W * 0.5, H * 0.15); g.fillStyle = "#2fd49a"; g.fillText("THREAT", W * 0.5, H * 0.15); }
-    const x0 = W * 0.05, top = H * 0.3, step = Math.max(8, (low - H * 0.36) / 8), lit = Math.ceil(integ / 12.5), cols = ["#f2c8e8", "#2fd49a", "#9ff0c8", "#c8a0e8"];
+    if (n > 0) { const fs = Math.round(H * (xr ? 0.1 : 0.11)), ty = H * (xr ? 0.26 : 0.15); g.font = `${fs}px 'Archivo Black', 'Arial Black', Impact, sans-serif`; g.lineWidth = Math.max(2, fs / 18); g.strokeStyle = "rgba(0,20,10,0.8)"; g.strokeText("THREAT", W * 0.5, ty); g.fillStyle = "#2fd49a"; g.fillText("THREAT", W * 0.5, ty); }
+    const x0 = W * inset, top = H * (xr ? 0.34 : 0.3), step = Math.max(8, (low - top - H * 0.08) / 8), lit = Math.ceil(integ / 12.5), cols = ["#f2c8e8", "#2fd49a", "#9ff0c8", "#c8a0e8"];
     for (let i = 0; i < 8; i++) { // integrity, filled from the bottom
       const y = top + (7 - i) * step; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + step * 0.85, y + step / 2); g.lineTo(x0, y + step); g.closePath();
       if (i < lit) { g.fillStyle = cols[i % 4]; g.fill(); } else { g.strokeStyle = "rgba(160,200,190,0.35)"; g.lineWidth = 2; g.stroke(); }
     }
-    const bx = W * 0.07, by = low, r = Math.min(H * 0.032, 26); g.strokeStyle = "#35e6ff"; g.lineWidth = Math.max(2, r / 5); // biohazard
+    const bx = W * (inset + 0.02), by = low, r = Math.min(H * 0.032, 26); g.strokeStyle = "#35e6ff"; g.lineWidth = Math.max(2, r / 5); // biohazard
     for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + (k * TAU) / 3; g.beginPath(); g.arc(bx + Math.cos(a) * r * 0.55, by + Math.sin(a) * r * 0.55, r * 0.6, a + 0.9, a - 0.9 + TAU); g.stroke(); }
     g.beginPath(); g.arc(bx, by, r * 0.38, 0, TAU); g.stroke();
     for (let i = 0; i < Math.min(n, 6); i++) { // a gold walker per threat in view
-      const u = Math.min(H * 0.012, 10), cx = W * 0.94 - i * u * 4.2, cy = low; g.fillStyle = "#f2c21a";
+      const u = Math.min(H * 0.012, 10), cx = W * (1 - inset) - i * u * 4.2, cy = low; g.fillStyle = "#f2c21a";
       g.fillRect(cx - u * 1.3, cy - u * 2.2, u * 2.6, u * 1.6); g.fillRect(cx - u * 0.7, cy - u * 3.2, u * 1.4, u); g.fillRect(cx - u * 2, cy - u * 1.9, u * 0.6, u * 1.2); g.fillRect(cx + u * 1.4, cy - u * 1.9, u * 0.6, u * 1.2);
       g.fillRect(cx - u * 1.3, cy - u * 0.6, u * 0.6, u * 1.6); g.fillRect(cx + u * 0.7, cy - u * 0.6, u * 0.6, u * 1.6);
     }
@@ -1707,12 +1717,12 @@
     if (!on) { VIS.key = ""; return; }
     if (xr) { vrVisor.m.quaternion.copy(camera.quaternion); vrVisor.m.position.set(0, -0.02, -1.25).applyQuaternion(camera.quaternion).add(camera.position); }
     key = `${key}|${xr}|${innerWidth}x${innerHeight}`; if (key === VIS.key) return; VIS.key = key;
-    if (xr) { draw(vrVisor.g, 1024, 576, 576 * 0.9); vrVisor.tex.needsUpdate = true; }
-    else { visorCv.width = innerWidth; visorCv.height = innerHeight; draw(visorCv.getContext("2d"), innerWidth, innerHeight, innerHeight - Math.max(150, innerHeight * 0.2)); }
+    if (xr) { draw(vrVisor.g, 1024, 576, 576 * 0.9, true); vrVisor.tex.needsUpdate = true; }
+    else { visorCv.width = innerWidth; visorCv.height = innerHeight; draw(visorCv.getContext("2d"), innerWidth, innerHeight, innerHeight - Math.max(150, innerHeight * 0.2), false); }
   }
-  function updateVisor(on, n = 0, integ = 100) { overlay(on, `v${Math.min(n, 6)}|${Math.ceil(integ / 12.5)}`, (g, W, H, low) => drawVisor(g, W, H, n, integ, low)); }
-  function drawKeypad(g, W, H, low, num, done) { // Johnny's ENTRY CODE pad: the digits dialled so far, the next key lit
-    g.clearRect(0, 0, W, H); const u = Math.min(W, H) * 0.045, x0 = W * 0.05, y0 = low - u * 5.6;
+  function updateVisor(on, n = 0, integ = 100) { overlay(on, `v${Math.min(n, 6)}|${Math.ceil(integ / 12.5)}`, (g, W, H, low, xr) => drawVisor(g, W, H, n, integ, low, xr)); }
+  function drawKeypad(g, W, H, low, num, done, xr) { // Johnny's ENTRY CODE pad: the digits dialled so far, the next key lit
+    g.clearRect(0, 0, W, H); const u = Math.min(W, H) * 0.045, x0 = W * (xr ? 0.24 : 0.05), y0 = (xr ? H * 0.78 : low) - u * 5.6;
     g.textAlign = "left"; g.fillStyle = "#e8f4ff"; g.shadowColor = "#4a9aff"; g.shadowBlur = 10; g.font = `bold ${Math.round(u * 0.62)}px 'Archivo Black', 'Arial Black', sans-serif`; g.fillText("ENTRY CODE", x0, y0 - u * 1.4);
     g.font = `${Math.round(u * 0.7)}px ${FONT}`; g.fillText(num.slice(0, done).replace(/(.{4})/g, "$1 ") + "_", x0, y0 - u * 0.45);
     "123456789*0#".split("").forEach((k, i) => {
@@ -2044,7 +2054,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); Sound.recHum(0); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -2315,7 +2325,7 @@
   }
   function spawnBolt(from, to, god, mov) {
     const b = bolts.find((b) => !b.on); if (!b) return;
-    b.on = true; b.god = god; b.life = 1.3; b.p.copy(from);
+    b.on = true; b.god = god; b.life = 1.3; b.dist = 0; b.p.copy(from);
     b.v.subVectors(to, from).normalize().multiplyScalar(god ? 210 : 150);
     if (mov) b.v.z -= R.speed;
     boltMesh.setColorAt(bolts.indexOf(b), god ? C_DATA : C_SIG); boltMesh.instanceColor.needsUpdate = true;
@@ -2375,6 +2385,8 @@
         if (b.life <= 0) b.on = false;
         else {
           if ((R.L.planeHit && R.L.planeHit(p0, b.p)) || (R.L.boltHit && R.L.boltHit(p0, b.p))) b.on = false;
+          b.dist = (b.dist || 0) + p0.distanceTo(b.p);
+          if (b.on && R.L.cover && b.dist > 4 && b.p.y < R.L.cover(b.p.x, b.p.z)) { b.on = false; burst(b.p.x, b.p.y + 0.1, b.p.z, C_HEAL, 6); } // into a hill
           for (const T of targets) { if (!b.on) break; if (segHit(p0, b.p, T.x, T.y, T.z, T.r + (b.god ? 1.2 : 0.3))) { b.on = false; T.hit(b.god ? 3 : 1); burst(b.p.x, b.p.y, b.p.z, b.god ? C_DATA : C_SIG, 6); } }
         }
       }
@@ -2553,7 +2565,7 @@
         if (!friendlies.length) buildFriendlies();
         friendlies.forEach((F) => { Object.assign(F, { x: F.x0, z: F.z0, st: "held", t: 0, seen: false }); F.c.restore(); F.c.root.visible = false; F.tag.visible = true; });
         R.freed = 0; R.ff = 0;
-        R.code = keyDigits.map(() => (Math.random() * 10) | 0); R.got = [false, false, false, false]; R.hunt = false; keyBeamMat.fog = true; keyBeamMat.needsUpdate = true;
+        R.code = keyDigits.map(() => (Math.random() * 10) | 0); R.got = [false, false, false, false]; R.hunt = false;
         keyDigits.forEach((K, i) => { K.on = true; K.g.visible = true; K.d = R.code[i]; drawKeyDigit(K); }); keypad.draw(R.code, R.got);
         btShips.forEach((S2) => { S2.on = false; S2.g.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
         flares.forEach((f, i) => f.position.set(rand(-25, 25), 20 + i * 9, rand(-30, -90)));
@@ -2640,7 +2652,7 @@
       bomb(x, z) {
         const gy = groundAt(x, z);
         burst(x, gy + 0.6, z, C_ORANGE, 60); shatterCube(x, gy + 0.3, z, C_HEAL, 10); Sound.blast(0.8, Math.hypot(A.x - x, A.z - z));
-        if (alive() && Math.hypot(A.x - x, A.z - z) < 3.2) damage(35, "BOMB", A.x, A.y, A.z);
+        if (alive() && Math.hypot(A.x - x, A.z - z) < 4) damage(50, "BOMB", A.x, A.y, A.z);
       },
       kill(T, x, y) {
         T.on = false; T.g.visible = false; R.kills++;
@@ -2692,7 +2704,7 @@
         // barbed wire: slows you and cuts you unless you find a gap
         if (live && !jack) BT.wires.forEach((wz, i) => {
           if (Math.abs(A.z - wz) > 0.7 || A.y - R.gy > 0.7 || BT.gaps[i].some(([a, b]) => A.x > a + 0.3 && A.x < b - 0.3)) return;
-          R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(8, "THORNS", A.x, A.y, A.z); }
+          R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(10, "THORNS", A.x, A.y, A.z); }
         });
         if (live && !jack && A.y - R.gy < 0.7) {
           for (const [x, z, r] of thickets) if (Math.abs(A.z - z) < r && Math.hypot(A.x - x, A.z - z) < r) { R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(8, "THORNS", A.x, A.y, A.z); } break; }
@@ -2708,7 +2720,9 @@
           }
         }
         // threats
-        let guardLeft = 0;
+        let guardLeft = 0, hum = 0;
+        for (const T of threats) if (T.kind === "rec" && T.on && T.st === "in") hum = Math.max(hum, T.diving ? 1 : clamp(1 - Math.hypot(A.x - T.g.position.x, A.z - T.g.position.z) / 150, 0, 1));
+        Sound.recHum(live && !jack ? hum : 0);
         const inBunker = !BDOOR.gone && bcell(A.x, A.z) !== null; // under the roof: nothing outside can see you
         for (const T of threats) {
           if (!T.on) continue;
@@ -2718,28 +2732,29 @@
           const ahead = (A.z - T.z) * dirZ, active = live && !jack && !inBunker && ahead > -1.5 && ahead < (T.kind === "soldier" ? 75 : 95);
           let cx = T.g.position.x, cy = T.g.position.y + 0.9, cr = 1.3;
           if (T.kind === "soldier") {
-            if (T.t <= 0) { if (T.st === "down") { if (active) { T.st = "up"; T.fireT = rand(0.5, 1.2); } T.t = rand(2, 3.4); } else { T.st = "down"; T.t = rand(1.4, 3.2); } }
+            if (T.t <= 0) { if (T.st === "down") { if (active) { T.st = "up"; T.fireT = rand(0.5, 1.2); } T.t = rand(2.6, 4); } else { T.st = "down"; T.t = rand(0.9, 2.2); } }
             T.up += ((T.st === "up" ? 1 : 0) - T.up) * Math.min(1, dt * 5);
             const fy = lerp(-BT.depth, -0.55, T.up);
             T.g.position.set(T.x + Math.sin(t * 0.7 + T.ph) * 0.3, fy, T.z); T.g.rotation.set(0, Math.atan2(A.x - T.x, A.z - T.z), 0);
             cx = T.g.position.x; cy = fy + 1.3; cr = 0.75;
-            if (active && T.up > 0.85) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(1.1, 1.9); enemyFire(btV.set(cx, cy, T.z + 0.6), 1, 0, 24, 9); } }
+            if (active && T.up > 0.85) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(0.8, 1.4); enemyFire(btV.set(cx, cy, T.z + 0.6), 1, 0, 26, 15); } }
           } else if (T.kind === "mg") {
             T.gun.rotation.y = Math.atan2(A.x - T.x, A.z - T.z);
             if (active) {
               T.fireT -= dt;
               if (T.fireT <= 0 && T.burst <= 0) T.burst = 5;
-              if (T.burst > 0 && T.fireT <= 0) { T.burst--; T.fireT = T.burst > 0 ? 0.12 : rand(2.4, 3.4); const yw = T.gun.rotation.y; enemyFire(btV.set(T.x + Math.sin(yw) * 1.6, T.g.position.y + 1.1, T.z + Math.cos(yw) * 1.6), 1, 0, 30, 7); }
+              if (T.burst > 0 && T.fireT <= 0) { T.burst--; T.fireT = T.burst > 0 ? 0.12 : rand(2.4, 3.4); const yw = T.gun.rotation.y; enemyFire(btV.set(T.x + Math.sin(yw) * 1.6, T.g.position.y + 1.1, T.z + Math.cos(yw) * 1.6), 1, 0, 32, 11); }
             }
           } else if (T.kind === "guard" || T.kind === "turret") {
             const dx = A.x - T.x, dz = A.z - T.z, d = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz);
-            const see = live && !jack && !BDOOR.gone && d < 34 && losClear(T.x, T.z, A.x, A.z);
-            if (T.kind === "guard") { T.g.rotation.y = yaw; cy = 1.3; cr = 0.8; } else { T.gun.rotation.y = yaw; cy = 4.05; cr = 1.0; }
+            const see = live && !jack && !BDOOR.gone && d < 38 && losClear(T.x, T.z, A.x, A.z);
+            if (T.kind === "guard") { T.g.position.x = T.x + Math.sin(t * 0.9 + T.ph) * 0.6; T.g.rotation.y = yaw; cy = 1.3; cr = 0.8; cx = T.g.position.x; } // guards shift about
+            else { T.gun.rotation.y = yaw; cy = T.hy; cr = 1.0; }
             if (see) {
               T.fireT -= dt * (R.alarm > 0 ? 1.7 : 1);
               if (T.fireT <= 0) {
-                if (T.kind === "guard") { T.fireT = rand(1.0, 1.7); enemyFire(btV.set(T.x + Math.sin(yaw) * 0.6, 1.35, T.z + Math.cos(yaw) * 0.6), 1, 0, 24, 9); }
-                else { T.fireT = rand(1.6, 2.2); enemyFire(btV.set(T.x + Math.sin(yaw) * 1.2, 4.0, T.z + Math.cos(yaw) * 1.2), 3, 0.07, 26, 7); }
+                if (T.kind === "guard") { T.fireT = rand(0.7, 1.2); enemyFire(btV.set(T.x + Math.sin(yaw) * 0.6, 1.35, T.z + Math.cos(yaw) * 0.6), 1, 0, 26, 15); }
+                else { T.fireT = rand(1.2, 1.7); enemyFire(btV.set(T.x + Math.sin(yaw) * 1.2, T.hy - 0.05, T.z + Math.cos(yaw) * 1.2), 3, 0.07, 28, 11); }
               }
             }
           } else if (T.kind === "rec") {
@@ -2747,16 +2762,24 @@
             // drifts slowly to hover ahead of you, then fires spreads down at you
             T.age += dt;
             const gx = Math.sin(t * 0.13 + T.ph) * 14, gz = Math.max(BT.bz + 25, A.z - 42 * dirZ), k = Math.min(1, dt * 0.22);
-            const P = T.g.position; P.x += (gx - P.x) * k; P.y += (12 + Math.sin(t * 0.5 + T.ph) * 1.5 - P.y) * k; P.z += (gz - P.z) * k;
+            const P = T.g.position; if (!T.diving) { P.x += (gx - P.x) * k; P.y += (12 + Math.sin(t * 0.5 + T.ph) * 1.5 - P.y) * k; P.z += (gz - P.z) * k; }
             T.z = P.z; T.g.rotation.y = Math.atan2(A.x - P.x, A.z - P.z);
             cx = P.x; cy = P.y + 1.5; cr = 5;
-            if (live && !jack && !inBunker && T.age > 7) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(3.5, 4.8); enemyFire(btV.set(P.x, P.y - 1, P.z + 2), 3, 0.09, 20, 9); } }
+            if (live && !jack && !inBunker && T.age > 7) {
+              T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(3.0, 4.2); enemyFire(btV.set(P.x, P.y - 1, P.z + 2), 3, 0.09, 22, 16); }
+              // every so often it dives at you; if you haven't brought it down, it hurts
+              T.dive = (T.dive ?? rand(8, 12)) - dt;
+              if (T.dive <= 0 && !T.diving) { T.diving = 2.6; Sound.say("danger"); showMsg("RECOGNIZER DIVING", "shoot it or get clear", COL.alarm, 1.6); }
+              if (T.diving) { T.diving -= dt; P.x += (A.x - P.x) * Math.min(1, dt * 1.6); P.z += (A.z - P.z) * Math.min(1, dt * 1.6); P.y += (A.y + 2 - P.y) * Math.min(1, dt * 1.8);
+                if (Math.hypot(A.x - P.x, A.z - P.z) < 5 && P.y - A.y < 5 && !T.hitYou) { T.hitYou = true; damage(30, "RECOGNIZER", A.x, A.y, A.z); pulse(1, 300); }
+                if (T.diving <= 0) { T.diving = 0; T.hitYou = false; T.dive = rand(9, 13); } }
+            }
           } else {
             const ph = t * 0.22 + T.ph; T.x = Math.sin(ph) * T.amp;
             T.g.position.set(T.x, Math.max(terrain(T.x - 1.8, T.z - 2.5), terrain(T.x + 1.8, T.z - 2.5), terrain(T.x - 1.8, T.z + 2.5), terrain(T.x + 1.8, T.z + 2.5)), T.z); T.g.rotation.y = lerp(T.g.rotation.y, Math.cos(ph) > 0 ? Math.PI / 2 : -Math.PI / 2, Math.min(1, dt * 1.5));
             const yw = Math.atan2(A.x - T.x, A.z - T.z); T.gun.rotation.y = yw - T.g.rotation.y;
             cx = T.x; cy = T.g.position.y + 1.3; cr = 2.4;
-            if (active) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(2.8, 3.6); enemyFire(btV.set(T.x + Math.sin(yw) * 3.8, T.g.position.y + 1.8, T.z + Math.cos(yw) * 3.8), 1, 0, 19, 24); Sound.cannon(Math.hypot(A.x - T.x, A.z - T.z)); } }
+            if (active) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(2.2, 3.0); enemyFire(btV.set(T.x + Math.sin(yw) * 3.8, T.g.position.y + 1.8, T.z + Math.cos(yw) * 3.8), 1, 0, 21, 35); Sound.cannon(Math.hypot(A.x - T.x, A.z - T.z)); } }
           }
           T.g.scale.setScalar(1 + T.flash * 0.08);
           if (T.kind !== "soldier" || T.up > 0.5) addT(cx, cy, T.z, cr, false, (d) => { T.hp -= d; T.flash = 1; if (T.hp <= 0) L.kill(T, cx, cy); else burst(cx, cy, T.z, C_RED, 6); });
@@ -2765,7 +2788,7 @@
         // code digits: pick them up; the door only opens with all four
         for (const K of keyDigits) {
           if (!K.on) continue;
-          K.g.visible = R.hunt || Math.abs(A.z - K.z) < 220; if (!K.g.visible) continue;
+          K.g.visible = true;
           K.face.lookAt(camW.x, K.y, camW.z); K.frame.rotation.y += dt * 1.2; K.frame.rotation.x = Math.sin(t * 0.8 + K.i) * 0.3; K.g.position.y = K.y + Math.sin(t * 1.7 + K.i) * 0.15;
           if (live && !jack && Math.hypot(A.x - K.x, A.z - K.z) < 1.9 && Math.abs(A.y - K.y) < 3) {
             K.on = false; K.g.visible = false; R.got[K.i] = true; keypad.draw(R.code, R.got);
@@ -2817,7 +2840,7 @@
           if (F.st === "gone") continue;
           const near = Math.abs(A.z - F.z) < 90; F.c.root.visible = near; if (!near && F.st === "held") continue;
           if (F.st === "held") {
-            F.c.cheer(t + F.ph); F.c.root.position.set(F.x, groundAt(F.x, F.z) + 0.92, F.z); F.c.root.rotation.set(0, Math.atan2(-(A.x - F.x), -(A.z - F.z)), 0);
+            F.c.cheer(t + F.ph); F.c.root.position.set(F.x, (inTrench(F.z) !== undefined ? -0.55 : groundAt(F.x, F.z)) + 0.92, F.z); // up on the fire step, waving F.c.root.rotation.set(0, Math.atan2(-(A.x - F.x), -(A.z - F.z)), 0);
             if (!F.seen && live && Math.hypot(A.x - F.x, A.z - F.z) < 28) { F.seen = true; Sound.say("friendly"); }
             F.tag.rotation.y += dt * 2; F.tag.position.y = 2.15 + Math.sin(t * 3 + F.ph) * 0.1;
             if (live && !jack && Math.hypot(A.x - F.x, A.z - F.z) < 2.3 && Math.abs(A.y - (groundAt(F.x, F.z) + 1.2)) < 2.6) {
@@ -2848,8 +2871,8 @@
         // the odd Space Paranoid drifting across overhead, dropping a bomb now and then
         if (live && !jack && (R.stage === "advance" || R.stage === "home") && A.z < -20) R.shipT -= dt;
         if (R.shipT <= 0) {
-          R.shipT = rand(11, 20);
-          for (const S2 of btShips.filter((q) => !q.on).slice(0, Math.random() < 0.3 ? 2 : 1)) { const dir = Math.random() < 0.5 ? -1 : 1; Object.assign(S2, { on: true, x: -dir * 70, y: rand(20, 26), z: A.z - dirZ * rand(15, 40), vx: dir * 8, hp: 3, dropT: rand(0.5, 1.5), flash: 0 }); S2.g.visible = true; S2.g.rotation.set(0, dir * Math.PI / 2, 0); Sound.whoosh(); }
+          R.shipT = rand(6, 11);
+          for (const S2 of btShips.filter((q) => !q.on).slice(0, Math.random() < 0.5 ? 2 : 1)) { const dir = Math.random() < 0.5 ? -1 : 1; Object.assign(S2, { on: true, x: -dir * 70, y: rand(20, 26), z: A.z - dirZ * rand(15, 40), vx: dir * 8, hp: 3, dropT: rand(0.5, 1.5), flash: 0 }); S2.g.visible = true; S2.g.rotation.set(0, dir * Math.PI / 2, 0); Sound.whoosh(); }
         }
         for (const S2 of btShips) {
           if (!S2.on) continue;
@@ -2860,7 +2883,7 @@
             S2.dropT -= dt;
             const bb = S2.dropT <= 0 && bombs.find((q) => !q.on), ring = bb && mortars.find((m) => !m.on);
             if (bb && ring) {
-              S2.dropT = rand(1.4, 2.4);
+              S2.dropT = rand(0.9, 1.6);
               Object.assign(bb, { on: true, x: S2.x, y: S2.y - 1, z: S2.z + rand(-2, 2), vy: 0, ring }); bb.b.visible = true;
               ring.on = true; ring.m.visible = true; ring.m.position.set(bb.x, groundAt(bb.x, bb.z) + 0.15, bb.z);
               if (Math.hypot(bb.x - A.x, bb.z - A.z) < 10) Sound.say("danger");
@@ -2921,9 +2944,10 @@
         const e = camera.matrixWorld.elements; let nb = 0; // brackets face the camera: corners along its right and up vectors
         threats.forEach((T, i) => {
           if (!(T.on && T.st !== "wait" && live && !R.over && !jack && Math.abs(A.z - T.z) < 120 && (A.z - T.z) * dirZ > -6)) return;
+          if (nb >= MAXRET) return;
           const indoor = T.kind === "guard" || T.kind === "turret";
           if (indoor ? !losClear(T.x, T.z, A.x, A.z) : inBunker) return; // the HUD can't see through bunker walls or its roof
-          const cy = T.g.position.y + (T.kind === "soldier" || T.kind === "guard" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : T.kind === "turret" ? 4.05 : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
+          const cy = T.g.position.y + (T.kind === "soldier" || T.kind === "guard" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : T.kind === "turret" ? T.hy : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
           const cx = T.g.position.x, cz = T.z, k = Math.max(sz, Math.hypot(cx - camW.x, cy - camW.y, cz - camW.z) * 0.045);
           const dim = T.kind === "soldier" && T.up < 0.5 ? 0.3 : 0.75 + 0.25 * Math.sin(t * 8 + i);
           brC.set(T.flash > 0 ? 0xffffff : T.guard ? 0xffb030 : 0xffdc8a).multiplyScalar(dim);
@@ -2935,6 +2959,16 @@
           if (!T.seen) { T.seen = true; Sound.say("threat"); } // first sight of each threat: the voice names it (when it isn't busy)
           nb++;
         });
+        for (const F of friendlies) { // friendlies get a green ring
+          if (F.st !== "held" || !F.c.root.visible || inBunker || nb >= MAXRET || Math.abs(A.z - F.z) > 70) continue;
+          const cx = F.x, cy = F.c.root.position.y + 0.5, cz = F.z, k = Math.max(1.7, Math.hypot(cx - camW.x, cy - camW.y, cz - camW.z) * 0.045);
+          for (let v = 0; v < BRV; v++) {
+            const px = BRC[v * 3] * k, py = BRC[v * 3 + 1] * k, o = (nb * BRV + v) * 3;
+            brPos[o] = cx + e[0] * px + e[4] * py; brPos[o + 1] = cy + e[1] * px + e[5] * py; brPos[o + 2] = cz + e[2] * px + e[6] * py;
+            brCol[o] = 0.25; brCol[o + 1] = 1.0; brCol[o + 2] = 0.55;
+          }
+          nb++;
+        }
         brGeo.setDrawRange(0, nb * BRV); updateVisor(true, nb, R.integrity, t); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
         if (R.stage === "home" || R.stage === "out") { // going home: the waypoint marks our lines
           const wd = Math.max(0, R.homeZ - A.z);
@@ -3278,7 +3312,7 @@
       update(dt, t) {
         const n = this.number;
         flightMove(dt, 27, true); flightView(dt, t, true);
-        overlay(R.stage === "dial" && alive() && !R.over, `k${R.digit}`, (g, W, H, low) => drawKeypad(g, W, H, low, n, R.digit)); // the ENTRY CODE pad
+        overlay(R.stage === "dial" && alive() && !R.over, `k${R.digit}`, (g, W, H, low, xr) => drawKeypad(g, W, H, low, n, R.digit, xr)); // the ENTRY CODE pad
         tunnel.position.z = A.z - 220;
         const H = A.z - 260;
         if (R.stage === "dial") {
@@ -3778,6 +3812,7 @@
   function startLevel(i) {
     const L = LEVELS[i];
     if (L.id !== "escape") SELF.t = null; // only the escape inherits a running self-destruct
+    Sound.voiceLevel(L.ground ? 0.55 : 1); // the voice sits back a little under the gunfire on foot
     R = newRun(L, i);
     resetWorld();
     A.x = 0; A.y = 4; A.z = 0; A.vx = A.vy = 0; prev.set(0, 4, 0);
