@@ -893,11 +893,13 @@
   const bsolid = (x, z) => { const ch = bcell(x, z); return ch === "#" || ch === "M" || (ch === "D" && !BDOOR.open); };
   const bsolidR = (x, z, r = 0.35) => bsolid(x, z) || bsolid(x + r, z) || bsolid(x - r, z) || bsolid(x, z + r) || bsolid(x, z - r);
   function losClear(x0, z0, x1, z1) { const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.6); for (let i = 1; i < n; i++) if (bsolid(lerp(x0, x1, i / n), lerp(z0, z1, i / n))) return false; return true; }
-  const bunkerWallMat = shader({ ...U }, `void main(){
+  const bunkerWallMat = shader({ ...U }, `void main(){ // inside the ziggurat: dark weathered concrete, tan seams, an orange stripe at waist height
       vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
       vec2 c = abs(n.y) > 0.5 ? vWorld.xz : (abs(n.z) > 0.5 ? vWorld.xy : vWorld.zy);
-      float cell = gridL((c + 1.5) / 3.0), minor = gridL(c / 0.75);
-      vec3 col = vec3(0.45, 0.95, 0.6) * (0.05 + minor * 0.08 + cell * 0.75) * (abs(n.y) > 0.5 ? 1.2 : 0.8);
+      float cell = gridL((c + 1.5) / 3.0), minor = gridL(c / 0.75), grime = hash(floor(c * 2.0)) * 0.08;
+      vec3 col = vec3(0.16, 0.11, 0.07) * (0.7 + grime * 4.0) + vec3(0.8, 0.62, 0.36) * (minor * 0.06 + cell * 0.45);
+      if (abs(n.y) < 0.5) { float b = vWorld.y; col = mix(col, vec3(0.85, 0.38, 0.10), smoothstep(0.03, 0.0, abs(b - 1.1) - 0.12) * 0.9); col = mix(col, vec3(0.32, 0.14, 0.05), step(4.4, b) * 0.8); }
+      col *= abs(n.y) > 0.5 ? 0.8 : 1.0;
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`);
   const bunker = new THREE.Group(); battle.add(bunker);
@@ -1898,7 +1900,16 @@
     dummy.quaternion.identity(); dummy.scale.setScalar(1); T.im.instanceMatrix.needsUpdate = true;
   }
   // chrome: your gun (right hand) and glove (left hand) on the battlefield, as in the film
-  const chromeMat = new THREE.MeshPhongMaterial({ color: 0x7c848e, emissive: 0x121519, specular: 0xffffff, shininess: 140, flatShading: true });
+  const chromeMat = new THREE.ShaderMaterial({ // chrome: reflects a made-up battlefield sky (black, the burning band, olive ground) plus a hard highlight
+    extensions: { derivatives: true },
+    vertexShader: `varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = mv.xyz; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `varying vec3 vV; void main(){
+      vec3 n = normalize(cross(dFdx(vV), dFdy(vV))), v = normalize(vV), r = reflect(v, n);
+      vec3 rw = (vec4(r, 0.0) * viewMatrix).xyz; float y = rw.y;
+      vec3 env = y > 0.0 ? mix(mix(vec3(1.0, 0.7, 0.3), vec3(0.7, 0.12, 0.05), smoothstep(0.0, 0.12, y)), vec3(0.04), smoothstep(0.12, 0.45, y)) : mix(vec3(0.35, 0.4, 0.12), vec3(0.08, 0.1, 0.03), smoothstep(0.0, -0.5, y));
+      float spec = pow(max(dot(r, normalize(vec3(-0.3, 0.6, 0.5))), 0.0), 40.0);
+      gl_FragColor = vec4(env * 0.75 + vec3(0.32, 0.34, 0.38) + spec * 0.9, 1.0); }`,
+  });
   function chromeGun() {
     const g = new THREE.Group(), m = (geo, x, y, z, rx = 0) => { const o = new THREE.Mesh(geo, chromeMat); o.position.set(x, y, z); o.rotation.x = rx; g.add(o); return o; };
     m(new THREE.BoxGeometry(0.07, 0.09, 0.26), 0, 0, -0.02); m(new THREE.CylinderGeometry(0.022, 0.026, 0.3, 8), 0, 0.01, -0.28, Math.PI / 2);
@@ -1913,7 +1924,7 @@
     m(0.018, 0.018, 0.06, -0.055, 0.0, -0.01, 0, 0.9); return g;
   }
   const handProps = [0, 1].map(() => { const g = new THREE.Group(); g.add(chromeGun()); const gl = chromeGlove(); g.add(gl); g.userData.glove = gl; g.visible = false; return g; });
-  const pcGun = chromeGun(); pcGun.position.set(0.17, -0.16, -0.36); pcGun.visible = false; camera.add(pcGun);
+  const pcGun = chromeGun(); pcGun.scale.setScalar(0.8); pcGun.position.set(0.2, -0.19, -0.42); pcGun.visible = false; camera.add(pcGun);
   function updateHandProps(on) { // in VR the right controller holds the gun, the left wears the glove; on a screen, the gun sits in first person
     const xr = renderer.xr.isPresenting;
     ctrls.forEach((c, i) => {
