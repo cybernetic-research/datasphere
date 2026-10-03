@@ -147,11 +147,11 @@
 
 <section id="splash">
   <div class="splash-inner">
-    <p class="kicker">One mission · 11 chapters · webxr</p>
+    <p class="kicker">One mission · 9 chapters · webxr</p>
     <h1 class="logo">datasphere</h1>
     <p class="pitch">The enemy's space lasers answer to a satellite uplink bunker behind their lines. Cross the battlefield, break into the bunker, jack into its mainframe and make it destroy its own lasers. Then get out, and get home.</p>
     <ul class="levels">
-      <li><b>01</b> Battlefield</li><li><b>02</b> The Bunker</li><li><b>03–10</b> Into the mainframe</li><li><b>11</b> Escape</li>
+      <li><b>01</b> Battlefield</li><li><b>02</b> The Bunker</li><li><b>03–08</b> Into the mainframe</li><li><b>09</b> Escape</li>
     </ul>
     <div class="actions">
       <button type="button" class="primary" id="vrBtn" disabled>Jack in with headset</button>
@@ -199,6 +199,7 @@
   if (!rec.uplink) { if (savedRec && rec.unlocked >= 4) rec.unlocked++; rec.uplink = true; } // the data cube slotted in before the long-distance call
   if (!rec.story) { if (savedRec && rec.unlocked >= 1) rec.unlocked++; rec.story = true; } // The Bunker slotted in as chapter 2
   if (!rec.sysop) { if (savedRec && rec.unlocked >= 9) rec.unlocked++; rec.sysop = true; } // Crush the Deck slotted in before the escape
+  if (!rec.merged) { if (savedRec) { const u = rec.unlocked; rec.unlocked = u <= 2 ? u : u <= 4 ? 2 : u - 2; } rec.merged = true; } // Data Run, the Gauntlet and Space Paranoids became one chapter
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ opts, rec })); } catch (e) {} };
   const lrec = (id) => rec.levels[id] || (rec.levels[id] = { best: null, data: 0, clears: 0, tries: 0 });
 
@@ -293,17 +294,25 @@
     }));
     m.renderOrder = -10; m.frustumCulled = false; return m;
   }
-  const FLOOR_FS = `uniform vec3 uA; uniform vec3 uB; uniform float uLane;
+  const FLOOR_FS = `uniform vec3 uA; uniform vec3 uB; uniform float uLane; uniform float uCirc;
     void main(){
       vec2 p = vWorld.xz;
       float minor = gridL(p / 4.0), major = gridL(p / 20.0);
       float pulse = smoothstep(0.93, 1.0, fract(-p.y / 90.0 - uTime * 0.35));
       float lane = smoothstep(0.35, 0.0, abs(abs(p.x) - 12.5)) * uLane;
+      if (uCirc > 0.5) { // the mainframe's floor: a dark circuit board, green rings across it (Lawnmower Man's Cyberspace)
+        vec2 cell = floor(p / 1.2), f = fract(p / 1.2); float h1 = hash(cell), h2 = hash(cell + 17.3);
+        float trace = h1 < 0.5 ? smoothstep(0.09, 0.0, abs(f.y - 0.5)) : smoothstep(0.09, 0.0, abs(f.x - 0.5));
+        float chip = step(0.86, h2) * step(0.18, f.x) * step(f.x, 0.82) * step(0.25, f.y) * step(f.y, 0.75), block = step(0.72, hash(floor(p / 4.8)));
+        float ring = smoothstep(0.03, 0.012, abs(fract(-p.y / 28.0) - 0.5));
+        vec3 cc = vec3(0.03, 0.05, 0.045) + vec3(0.03) * block + vec3(0.14, 0.2, 0.17) * trace + vec3(0.2, 0.24, 0.22) * chip + uA * (ring * 0.8 + lane * 0.9 + pulse * trace * 0.5);
+        gl_FragColor = vec4(mix(cc, uFogColor, fogF(vWorld)), 1.0); return;
+      }
       vec3 base = mix(uA, uB, smoothstep(8.0, 70.0, abs(p.x)));
       vec3 col = base * (minor * 0.32 + major * 0.8 + pulse * minor * 1.5) + uB * lane * 1.1 + vec3(0.02, 0.0, 0.05);
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`;
-  const makeFloorMat = (UN, a, b, lane) => shader({ ...UN, uA: { value: new C3(a) }, uB: { value: new C3(b) }, uLane: { value: lane } }, FLOOR_FS);
+  const makeFloorMat = (UN, a, b, lane) => shader({ ...UN, uA: { value: new C3(a) }, uB: { value: new C3(b) }, uLane: { value: lane }, uCirc: { value: 0 } }, FLOOR_FS);
 
   // ===================================================================== run environment
   const sky = makeSky(U.uFogColor); runScene.add(sky);
@@ -312,8 +321,8 @@
   {
     const lm = (c, o) => new THREE.LineBasicMaterial({ color: c, fog: false, transparent: true, opacity: o });
     const pg = new THREE.EdgesGeometry(new THREE.ConeGeometry(260, 360, 4, 6));
-    const a = new THREE.LineSegments(pg, lm(0x35e6ff, 0.28)); a.position.set(-430, 180, -950); a.rotation.y = 0.5;
-    const b = new THREE.LineSegments(pg, lm(0xff47d4, 0.22)); b.position.set(520, 140, -1050); b.scale.setScalar(0.8);
+    const a = new THREE.LineSegments(pg, lm(0x2fdc6a, 0.28)); a.position.set(-430, 180, -950); a.rotation.y = 0.5;
+    const b = new THREE.LineSegments(pg, lm(0x9aa2ab, 0.22)); b.position.set(520, 140, -1050); b.scale.setScalar(0.8);
     const core = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(140, 1)), lm(0xffc24a, 0.3));
     core.position.set(90, 300, -1100); core.name = "core";
     landmarks.add(a, b, core);
@@ -338,7 +347,7 @@
   const TN = 240, TSPAN = 760;
   const towers = new THREE.InstancedMesh(unitBox, towerMat, TN);
   towers.frustumCulled = false; runScene.add(towers);
-  const TCOL = [0x35e6ff, 0x35e6ff, 0xff47d4, 0x7a5cff, 0x7a5cff, 0xffc24a].map((c) => new C3(c));
+  const TCOL = [0x2fdc6a, 0x1a7a3a, 0x9aa2ab, 0x9aa2ab, 0x3a5a48, 0xc8a048].map((c) => new C3(c)); // green and silver monoliths
   const TZ = new Float32Array(TN);
   const dummy = new THREE.Object3D();
   function placeTower(i, z) {
@@ -429,7 +438,7 @@
     }
     return g;
   }
-  const exitPort = makePortal(0x35e6ff, 6, "EXIT PORT");
+  const exitPort = makePortal(0x2fdc6a, 6, "EXIT PORT");
   const beijingPort = makePortal(0xff2a52, 5.5, "◉ THE HACKER");
 
   // ---- firewall cage (Firewall Trap)
@@ -610,6 +619,7 @@
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`;
   const spikeMat = shader({ ...U }, SILVER_FS);
+  iceMesh.geometry = new THREE.DodecahedronGeometry(0.85, 0); iceMesh.material = shader({ ...U }, SILVER_FS); // ICE becomes the film's silver dodecahedra
   const SPN = 520;
   const spikeMesh = new THREE.InstancedMesh(spikeGeo, spikeMat, SPN); spikeMesh.frustumCulled = false; spikeMesh.visible = false; runScene.add(spikeMesh);
   spikeMesh.setColorAt(0, new C3(1, 1, 1));
@@ -719,8 +729,8 @@
     [new THREE.BoxGeometry(2.8, 1, 3.6), mat4(5.4, -4, 0)],
     [new THREE.BoxGeometry(2.8, 1, 3.6), mat4(-5.4, -4, 0)],
   ]);
-  const shipFill = new THREE.MeshPhongMaterial({ color: 0xff7a18, emissive: 0x401000, flatShading: true, shininess: 40 });
-  const shipEdge = new THREE.LineBasicMaterial({ color: 0xffc080, transparent: true, opacity: 0.95, blending: ADD, depthWrite: false });
+  const shipFill = new THREE.MeshPhongMaterial({ color: 0xe6ecf2, emissive: 0x1a1e24, flatShading: true, shininess: 60 }); // the film's red-and-white jets
+  const shipEdge = new THREE.LineBasicMaterial({ color: 0xff4a3a, transparent: true, opacity: 0.95, blending: ADD, depthWrite: false });
   const recFill = new THREE.MeshPhongMaterial({ color: 0xd8261c, emissive: 0x300404, flatShading: true });
   const recEdge = new THREE.LineBasicMaterial({ color: 0xff9070, transparent: true, opacity: 0.95, blending: ADD, depthWrite: false });
   function hull(geo, fill, edge) {
@@ -1953,7 +1963,7 @@
     const { g, c } = vrTitle; g.clearRect(0, 0, c.width, c.height);
     g.textAlign = "center"; g.fillStyle = COL.cyan; g.shadowColor = COL.cyan; g.shadowBlur = 30;
     g.font = `150px ${DFONT}`; g.fillText("datasphere", 512, 190);
-    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("ONE MISSION · 11 CHAPTERS", 512, 262);
+    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("ONE MISSION · 9 CHAPTERS", 512, 262);
     g.fillStyle = COL.ink; g.font = `38px ${FONT}`; g.fillText("pull the trigger to enter the hub", 512, 344);
     vrTitle.tex.needsUpdate = true;
   }
@@ -2254,8 +2264,8 @@
     trails.forEach((t) => (t.init = false));
   }
   const ENVS = {
-    highway: { fog: 0x0d0320, dens: 0.0068, a: 0xff47d4, b: 0x35e6ff, world: true },
-    paranoid: { fog: 0x160512, dens: 0.0068, a: 0xff8a1f, b: 0x7a5cff, world: true },
+    highway: { fog: 0x030806, dens: 0.0068, a: 0x2fdc6a, b: 0x9aa2ab, world: true },
+    paranoid: { fog: 0x05080a, dens: 0.0068, a: 0x2fdc6a, b: 0xd8e0e8, world: true },
     tunnel: { fog: 0x020818, dens: 0.011, a: 0x6aa8ff, b: 0x35e6ff, world: false },
     cage: { fog: 0x12020a, dens: 0.012, a: 0xff2a3a, b: 0x3a0010, world: false },
     poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
@@ -2271,7 +2281,7 @@
     floor.visible = towers.visible = landmarks.visible = streaks.visible = e.world;
     tunnel.visible = name === "tunnel"; cage.visible = name === "cage"; polyGroup.visible = name === "poly";
     corridor.visible = spikeMesh.visible = dodecMesh.visible = dodecSpikes.visible = name === "gauntlet";
-    battle.visible = name === "battle"; uplink.visible = name === "uplink";
+    battle.visible = name === "battle"; uplink.visible = name === "uplink"; floorMat.uniforms.uCirc.value = e.world ? 1 : 0;
     sky.material.uniforms.uBand.value = name === "battle" ? 1 : 0; mountains.visible = name === "battle";
     R.fogBase.set(e.fog); R.floorA.set(e.a); R.floorB.set(e.b);
     runScene.fog.color.copy(R.fogBase); runScene.fog.density = U.uFogDensity.value = e.dens;
@@ -2360,6 +2370,7 @@
   }
   function levelComplete(title, sub) {
     if (R.over) return;
+    if (R.L.onSubComplete && R.L.onSubComplete(title, sub)) return; // a phase of a longer chapter ended: it carries on
     R.over = "done"; R.overT = R.overMax = 7;
     const r = lrec(R.id); r.clears++; r.best = r.best === null ? R.time : Math.min(r.best, R.time); r.data = Math.max(r.data, Math.floor(R.data));
     rec.unlocked = Math.max(rec.unlocked, Math.min(LEVELS.length - 1, R.li + 1));
@@ -3879,6 +3890,44 @@
     },
   });
   LEVELS.splice(1, 0, BUNKER); LEVELS.push(ESCAPE);
+  // chapter 3 is one continuous flight: the data highway, the spike corridor, then the security programs, warping between them
+  const FLIGHTS = ["run", "gauntlet", "paranoids"].map((id) => LEVELS.find((L) => L.id === id));
+  const PHASE_NAME = ["THE DATA HIGHWAY", "THE SPIKE CORRIDOR", "SECURITY SPACE"];
+  const MAINFRAME = {
+    id: "mainframe", num: "03", name: "Into the Mainframe", col: COL.amber, music: "run", ownIntro: true,
+    blurb: "One run in: fill 120 GB on the data highway, roll through the spike corridor, beat its security programs.",
+    brief: "You're in the enemy net. Fill your buffer with 120 GB of access data on the data highway, take the exit port into the mainframe's spike corridor and roll through ten keyholes, then fight its security programs in open circuit space until the core is exposed. One run, no way back.",
+    phase: 0,
+    get sub() { return FLIGHTS[this.phase]; },
+    get roll() { return this.phase === 1; }, // the right stick rolls you in the spike corridor
+    init() { this.phase = 0; R.trans = null; FLIGHTS[0].init.call(FLIGHTS[0]); showMsg(PHASE_NAME[0], "fill your buffer: 120 GB, then the exit port", COL.amber, 3.5); },
+    objective() { const o = this.sub.objective.call(this.sub); return { ...o, label: `${this.phase + 1} / 3 ${PHASE_NAME[this.phase].toLowerCase()} · ${o.label}` }; },
+    onRespawn() { if (this.sub.onRespawn) this.sub.onRespawn.call(this.sub); },
+    onSubComplete(title) { // a phase ended: warp into the next one (the last phase ends the chapter)
+      if (this.phase >= FLIGHTS.length - 1) return false;
+      if (!R.trans) { R.trans = { t: 0 }; Sound.whoosh(); Sound.say("granted"); showMsg(title, `next: ${PHASE_NAME[this.phase + 1].toLowerCase()}`, COL.cyan, 2.2); }
+      return true;
+    },
+    update(dt, t) {
+      if (R.trans) {
+        R.trans.t += dt; zoomTube.visible = true; camera.getWorldPosition(zoomTube.position); zoomTube.material.uniforms.uK.value = Math.min(1, R.trans.t * 2);
+        if (R.trans.t > 1.3) {
+          this.phase++; R.trans = null;
+          const keep = { data: R.data, lives: R.lives, time: R.time, kills: R.kills, god: R.god };
+          resetWorld(); A.x = 0; A.y = 4; A.z = 0; A.vx = A.vy = 0; prev.set(0, 4, 0);
+          Object.assign(R, keep, { integrity: 100, inv: 2, eyeCal: null, speed: 0, stage: "", godT: 0 });
+          rig.position.set(0, 3.45, 4.6); this.sub.init.call(this.sub); rig.position.x = A.x * 0.75; Sound.track(this.sub.music);
+          showMsg(PHASE_NAME[this.phase], this.phase === 1 ? "roll through ten keyholes" : "shoot down its security programs", COL.amber, 3);
+          return;
+        }
+      }
+      this.sub.update.call(this.sub, dt, t);
+      if (this.phase !== 1) { const score = Math.floor(R.data * 50); overlay(alive() && !R.over, `f${score}|${Math.ceil(R.integrity / 6.25)}|${R.lives}`, (g, W, H, low, xr) => drawFlightHud(g, W, H, low, xr, score, R.integrity, R.lives)); }
+    },
+  };
+  for (const L of FLIGHTS) LEVELS.splice(LEVELS.indexOf(L), 1);
+  LEVELS.splice(2, 0, MAINFRAME);
+  LEVELS.forEach((L, i) => (L.num = String(i + 1).padStart(2, "0"))); // chapters numbered in order
   const SPLASH = { id: "splash", name: "Splash", music: "splash", objective: () => ({ label: "", text: "", prog: 0 }),
     init() { setEnv("highway"); R.nPk = -40; R.nIce = -120; },
     update(dt, t) {
