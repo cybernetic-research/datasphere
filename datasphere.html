@@ -910,6 +910,20 @@
     const g = K.c.getContext("2d"); g.clearRect(0, 0, 128, 128); g.textAlign = "center"; g.textBaseline = "middle"; g.font = `104px ${FONT}`;
     g.fillStyle = "#f2b8ff"; g.shadowColor = "#d04dff"; g.shadowBlur = 18; g.fillText(String(K.d), 64, 70); K.tex.needsUpdate = true;
   }
+  // friendlies: low-poly people held out on the field, mostly down in the trenches; walk up to free them, don't shoot them
+  const friendlies = [];
+  function buildFriendlies() {
+    const craters = BUMPS.filter((b) => b.crater && Math.abs(b.x) < BT.hw - 2);
+    for (let i = 0; i < 10; i++) {
+      let x, z; // one per tenth of the field, so there's always someone to find
+      const z0 = lerp(-20, BT.bz + 20, i / 10), z1 = lerp(-20, BT.bz + 20, (i + 1) / 10), band = craters.filter((b) => b.z < z0 && b.z > z1), lines = BT.trenches.filter((tz) => tz < z0 + 10 && tz > z1 - 10 && tz < 0);
+      if ((Math.random() < 0.6 && lines.length) || !band.length) { z = (lines.length ? lines[(Math.random() * lines.length) | 0] : BT.trenches[1]) + rand(-1, 1); x = rand(-BT.hw + 2, BT.hw - 2); }
+      else { const b = band[(Math.random() * band.length) | 0]; x = b.x; z = b.z; }
+      const c = makeConstruct({ hue: 0.09 }); c.body.rotation.x = 0; c.root.visible = false; battle.add(c.root);
+      const tag = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false })); tag.position.y = 2.15; c.root.add(tag);
+      friendlies.push({ c, tag, x0: x, z0: z, x, z, st: "held", t: 0, ph: rand(0, TAU) });
+    }
+  }
   // the odd Space Paranoid crossing overhead, dropping bombs; a ring marks where each one will land
   const btShips = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
   const bombs = [0, 1, 2, 3, 4, 5].map(() => { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xff8a1f })); b.visible = false; battle.add(b); return { b, on: false, x: 0, y: 0, z: 0, vy: 0, ring: null }; });
@@ -1173,6 +1187,14 @@
         ik(J.sh, J.tgt, 300, 285, bend, J.el, J.hand); arms(p);
       }
     }
+    function cheer(t) { // standing, both arms up, waving for help
+      for (const p of P) {
+        const s = p.side, J = p.J;
+        J.hip.set(s * 95, 0, 0); J.tgt.set(s * 130, -835, 0); ik(J.hip, J.tgt, 440, 430, KNEE, J.knee, J.ankle); limbs(p);
+        J.sh.set(s * 205, 500, 0); J.tgt.set(s * (300 + Math.sin(t * 6 + s) * 130), 1050, -60); bend.set(s, 0, 0.3);
+        ik(J.sh, J.tgt, 300, 285, bend, J.el, J.hand); arms(p);
+      }
+    }
     function writhe(t) { // agony: limbs thrash, back arches
       for (const p of P) {
         const s = p.side, J = p.J;
@@ -1219,7 +1241,7 @@
     }
     function setStyle(solid) { for (const m of Object.values(M)) m.visible = solid; }
     function handWorld(i, out) { return body.localToWorld(out.copy(P[i].J.hand)); }
-    const c = { root, body, P, gun, pose, stride, writhe, tint, shatter, derezStep, restore, setStyle, feet, base, handWorld };
+    const c = { root, body, P, gun, pose, stride, cheer, writhe, tint, shatter, derezStep, restore, setStyle, feet, base, handWorld };
     constructs.push(c);
     return c;
   }
@@ -1947,7 +1969,7 @@
         p0.copy(b.p); b.p.addScaledVector(b.v, dt); b.life -= dt;
         if (b.life <= 0) b.on = false;
         else {
-          if (R.L.planeHit && R.L.planeHit(p0, b.p)) b.on = false;
+          if ((R.L.planeHit && R.L.planeHit(p0, b.p)) || (R.L.boltHit && R.L.boltHit(p0, b.p))) b.on = false;
           for (const T of targets) { if (!b.on) break; if (segHit(p0, b.p, T.x, T.y, T.z, T.r + (b.god ? 1.2 : 0.3))) { b.on = false; T.hit(b.god ? 3 : 1); burst(b.p.x, b.p.y, b.p.z, b.god ? C_DATA : C_SIG, 6); } }
         }
       }
@@ -2119,6 +2141,9 @@
         mortars.forEach((m) => { m.on = false; m.m.visible = false; });
         mines.forEach((M) => { M.on = true; M.ring = false; mineShow(M); });
         powerUps.forEach((P) => { P.on = true; P.g.visible = true; });
+        if (!friendlies.length) buildFriendlies();
+        friendlies.forEach((F) => { Object.assign(F, { x: F.x0, z: F.z0, st: "held", t: 0 }); F.c.restore(); F.c.root.visible = false; F.tag.visible = true; });
+        R.freed = 0; R.ff = 0;
         R.code = keyDigits.map(() => (Math.random() * 10) | 0); R.got = [false, false, false, false]; R.hunt = false; keyBeamMat.fog = true; keyBeamMat.needsUpdate = true;
         keyDigits.forEach((K, i) => { K.on = true; K.g.visible = true; K.d = R.code[i]; drawKeyDigit(K); }); keypad.draw(R.code, R.got);
         btShips.forEach((S2) => { S2.on = false; S2.g.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
@@ -2132,13 +2157,23 @@
       objective() {
         const left = threats.filter((T) => T.on && T.st !== "wait").length, d = Math.max(0, Math.round(A.z - BT.bz)), prog = 1 - d / -BT.bz;
         const code = R.code.map((c, i) => (R.got[i] ? c : "_")).join(" "), have = R.got.filter(Boolean).length;
-        if (R.stage === "advance") return { label: `Threats ${left} · door code ${code}`, text: have < 4 ? (R.hunt ? `Find the missing code digits · follow the violet beams · ${have} / 4` : `Find the 4 code digits · reach the bunker · ${d} m`) : `Code complete · reach the bunker · ${d} m`, prog };
+        if (R.stage === "advance") return { label: `Threats ${left} · code ${code} · freed ${R.freed}`, text: have < 4 ? (R.hunt ? `Find the missing code digits · follow the violet beams · ${have} / 4` : `Find the 4 code digits · reach the bunker · ${d} m`) : `Code complete · reach the bunker · ${d} m`, prog };
         if (R.stage === "open") return { label: `Threats ${left}`, text: "Bunker open · get inside and jack in", prog };
         return { label: "Bunker", text: "Jacking in…", prog: 1 };
       },
       onRespawn() {
         A.z = R.cp; A.y = R.by = groundAt(A.x, R.cp) + 1.2; R.jumping = false; R.vy = 0; A.vx = 0; R.vz = R.walk = 0; prev.set(A.x, A.y, A.z);
         mortars.forEach((m) => { m.on = false; m.m.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
+      },
+      boltHit(a, b) { // your bolts hit friendlies too: they shatter and it costs you
+        for (const F of friendlies) {
+          if ((F.st !== "held" && F.st !== "run") || !F.c.root.visible) continue;
+          const P = F.c.root.position; if (!segHit(a, b, P.x, P.y + 0.45, P.z, 0.55)) continue;
+          F.st = "dead"; F.t = 0; F.tag.visible = false; F.c.shatter(); R.ff++; R.data = Math.max(0, R.data - 60);
+          burst(P.x, P.y + 0.5, P.z, C_RED, 40); Sound.buzz(); Sound.flatline(); showMsg("FRIENDLY FIRE", "-60 GB · that was one of ours", COL.alarm, 2.2);
+          return true;
+        }
+        return false;
       },
       blowMine(M) {
         M.on = false; M.ring = false; mineShow(M); const y = M.y;
@@ -2269,6 +2304,24 @@
           if (d < 45 && M.z < A.z + 2) addT(M.x, M.y + 0.1, M.z, 0.7, false, () => { if (M.on) L.blowMine(M); });
         }
         for (const c of BT.chunks) c.m.visible = c.z1 < A.z + 30 && c.z0 > A.z - 150; // only the ground you can see through the fog
+        // friendlies: waving for help until you reach them, then they run back the way you came
+        for (const F of friendlies) {
+          if (F.st === "gone") continue;
+          const near = Math.abs(A.z - F.z) < 90; F.c.root.visible = near; if (!near && F.st === "held") continue;
+          if (F.st === "held") {
+            F.c.cheer(t + F.ph); F.c.root.position.set(F.x, groundAt(F.x, F.z) + 0.92, F.z); F.c.root.rotation.set(0, Math.atan2(-(A.x - F.x), -(A.z - F.z)), 0);
+            F.tag.rotation.y += dt * 2; F.tag.position.y = 2.15 + Math.sin(t * 3 + F.ph) * 0.1;
+            if (live && !jack && Math.hypot(A.x - F.x, A.z - F.z) < 2.3 && Math.abs(A.y - (groundAt(F.x, F.z) + 1.2)) < 2.6) {
+              F.st = "run"; F.t = 0; F.tag.visible = false; R.freed++; R.data += 40; burst(F.x, A.y, F.z, C_HEAL, 30); Sound.heal();
+              showMsg("RESCUED", `+40 GB · ${R.freed} freed · they're heading back to our lines`, COL.heal, 1.8);
+            }
+          } else if (F.st === "run") {
+            F.t += dt; F.z += 6.5 * dt; F.x = clamp(F.x + Math.sin(F.ph + F.t * 0.7) * dt * 1.5, -BT.hw, BT.hw);
+            F.c.stride(F.t * 11, 1); F.c.root.position.set(F.x, groundAt(F.x, F.z) + 0.92 + Math.abs(Math.sin(F.t * 11)) * 0.05, F.z); F.c.root.rotation.set(-0.1, Math.PI, 0);
+            if (F.t > 14 || F.z > 2) { F.st = "gone"; F.c.root.visible = false; }
+          } else if (F.st === "dead") { F.t += dt; F.c.derezStep(dt); if (F.t > 2) { F.st = "gone"; F.c.root.visible = false; } }
+          if (F.c.root.visible) F.c.tint(t, F.st === "run" ? 0.5 : 0.1, F.st === "dead" ? 1 : 0, 0, 0);
+        }
         // power-ups
         for (const P of powerUps) {
           if (!P.on) continue;
@@ -3292,7 +3345,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, powerUps, keyDigits, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, powerUps, keyDigits, friendlies, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
