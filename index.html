@@ -71,6 +71,13 @@
     padding-inline: 16px;
     padding-block: calc(14px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-bottom, 0px));
   }
+  #brief { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(4, 2, 12, 0.74); }
+  #brief[hidden] { display: none; }
+  #brief .card { max-width: 640px; width: 100%; border: 1px solid var(--line); background: var(--panel); padding: 24px 26px; }
+  #brief .k { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+  #brief .t { font-family: var(--f-display); font-size: clamp(26px, 6vw, 46px); margin: 6px 0 12px; text-shadow: 0 0 18px currentColor; overflow-wrap: anywhere; }
+  #brief p { margin: 0 0 16px; line-height: 1.5; }
+  #brief .h { font-size: 13px; color: var(--dim); letter-spacing: 0.1em; text-transform: uppercase; }
   #msg { align-self: center; justify-self: center; text-align: center; transition: opacity 0.4s; max-width: 100%; }
   #msg .t { font-family: var(--f-display); font-size: clamp(24px, 6vw, 58px); letter-spacing: 0.06em; text-shadow: 0 0 22px currentColor; overflow-wrap: anywhere; }
   #msg .s { font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.88; margin-top: 6px; }
@@ -112,6 +119,7 @@
 <div id="stage"></div>
 
 <div id="ui">
+  <div id="brief" hidden><div class="card"><div class="k" id="briefK"></div><div class="t" id="briefT"></div><p id="briefP"></p><div class="h" id="briefH">Click or press Space to begin</div></div></div>
   <div id="msg" style="opacity:0"><div class="t" id="msgT"></div><div class="s" id="msgS"></div></div>
   <div class="dock">
     <p id="hubHelp" hidden>Click a level card to start. Customise your construct on the left panel; records are on the right. Esc during a level returns here.</p>
@@ -133,11 +141,11 @@
 
 <section id="splash">
   <div class="splash-inner">
-    <p class="kicker">Jack in · 8 levels · webxr</p>
+    <p class="kicker">One mission · 10 chapters · webxr</p>
     <h1 class="logo">datasphere</h1>
-    <p class="pitch">You are a construct in the grid. Steal data, shoot down Space Paranoids, dial Beijing down a stolen trunk line, crack your way out of a firewall cage, and survive the Polybius cabinet.</p>
+    <p class="pitch">The enemy's space lasers answer to a satellite uplink bunker behind their lines. Cross the battlefield, break into the bunker, jack into its mainframe and make it destroy its own lasers. Then get out, and get home.</p>
     <ul class="levels">
-      <li><b>01</b> Data Run</li><li><b>02</b> Space Paranoids</li><li><b>03</b> Call Beijing</li><li><b>04</b> Firewall Trap</li><li><b>05</b> Polybius</li>
+      <li><b>01</b> Battlefield</li><li><b>02</b> The Bunker</li><li><b>03–09</b> Into the mainframe</li><li><b>10</b> Escape</li>
     </ul>
     <div class="actions">
       <button type="button" class="primary" id="vrBtn" disabled>Jack in with headset</button>
@@ -145,8 +153,8 @@
     </div>
     <p class="note" id="xrNote">Checking for a VR headset…</p>
     <dl class="keys">
-      <dt>Headset</dt><dd>Stick steers · trigger fires where you point · grip boosts · A/B/X/Y god mode · always 1st person · hold stick click to quit a level · Battlefield: left stick walks where you look, A/X jumps · Gauntlet: right stick rolls · Beijing Uplink: put the controllers down and pinch with your hands (or use the trigger)</dd>
-      <dt>Keys</dt><dd>WASD steers · mouse aims, click fires · Shift boosts · G god mode · V first/third person · Space jumps on the Battlefield · Q/E roll in the Gauntlet · drag the cube in the Uplink, G for a hint · Esc quits a level · M mutes</dd>
+      <dt>Headset</dt><dd>Stick steers · trigger fires where you point · grip boosts · A/B/X/Y god mode · always 1st person · hold stick click to quit a level · Battlefield: left stick walks where you look, A/X jumps · Gauntlet: right stick rolls · Open the Line: put the controllers down and pinch with your hands (or use the trigger)</dd>
+      <dt>Keys</dt><dd>WASD steers · mouse aims, click fires · Shift boosts · G god mode · V first/third person · Space jumps on the Battlefield · Q/E roll in the Gauntlet · drag the cube in Open the Line, G for a hint · Esc quits a level · M mutes</dd>
       <dt>Touch</dt><dd>Drag to steer · Fire, Boost and God buttons · tap targets in the Firewall Trap</dd>
     </dl>
     <p class="note">Hitting a firewall kills you on the spot. ICE cubes shatter and cost 20% integrity. Three neural jacks (lives) per level; each death spills 30% of your buffer.</p>
@@ -182,7 +190,8 @@
   // levels added later shift the unlock index of older saves: The Gauntlet (after Data Run), then the Simian Battlefield (first)
   if (!rec.gauntlet) { if (savedRec && rec.unlocked >= 1) rec.unlocked++; rec.gauntlet = true; }
   if (!rec.battle) { if (savedRec) rec.unlocked++; rec.battle = true; }
-  if (!rec.uplink) { if (savedRec && rec.unlocked >= 4) rec.unlocked++; rec.uplink = true; } // Beijing Uplink slotted in before Call Beijing
+  if (!rec.uplink) { if (savedRec && rec.unlocked >= 4) rec.unlocked++; rec.uplink = true; } // the data cube slotted in before the long-distance call
+  if (!rec.story) { if (savedRec && rec.unlocked >= 1) rec.unlocked++; rec.story = true; } // The Bunker slotted in as chapter 2
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ opts, rec })); } catch (e) {} };
   const lrec = (id) => rec.levels[id] || (rec.levels[id] = { best: null, data: 0, clears: 0, tries: 0 });
 
@@ -347,7 +356,7 @@
   streaks.frustumCulled = false; runScene.add(streaks);
   function reseedStreaks(z) { for (const s of st) { s.x = rig.position.x + rand(-45, 45); s.y = rand(0.5, 35); s.z = z - rand(0, 300); } }
 
-  // ---- trunk-line tunnel (Call Beijing)
+  // ---- trunk-line tunnel (Long Distance)
   const TUN_R = 7;
   const PATH = { x: 0, y: 6 };
   function path(u, out = PATH) {
@@ -377,7 +386,7 @@
   const tunGeo = new THREE.CylinderGeometry(TUN_R, TUN_R, 520, 24, 130, true); tunGeo.rotateX(Math.PI / 2);
   const tunnel = new THREE.Mesh(tunGeo, tunnelMat); tunnel.frustumCulled = false; tunnel.visible = false; runScene.add(tunnel);
 
-  // ---- portals (exit port, Beijing exchange)
+  // ---- portals (exit port, the hacker's node)
   const portalMat = (col) => new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: ADD, side: THREE.DoubleSide,
     uniforms: { uTime: U.uTime, uCol: { value: new C3(col) } },
@@ -401,7 +410,7 @@
     return g;
   }
   const exitPort = makePortal(0x35e6ff, 6, "EXIT PORT");
-  const beijingPort = makePortal(0xff2a52, 5.5, "北京 BEIJING");
+  const beijingPort = makePortal(0xff2a52, 5.5, "◉ THE HACKER");
 
   // ---- firewall cage (Firewall Trap)
   const cageMat = shader({ ...U, uColor: { value: new C3(0xff2a3a) }, uHeat: { value: 0 } }, `uniform vec3 uColor; uniform float uHeat;
@@ -716,7 +725,7 @@
   const groundAt = (x, z) => (inTrench(z) !== undefined ? -BT.depth : terrain(x, z));
   function coverAt(x, z) { // top of the terrain for enemy fire: trench floors, sandbag parapets, hills, the bunker front
     for (const tz of BT.trenches) { const d = Math.abs(z - tz); if (d < BT.tw) return -BT.depth; if (d < BT.tw + 0.9) return 0.7; }
-    if (z < BT.bz && z > BT.bz - 0.8 && Math.abs(x) < 8) return 5.8;
+    if (!BDOOR.gone && z < BT.bz && z > BT.bz - BROWS * BC && Math.abs(x) < (BCOLS * BC) / 2) return bsolid(x, z) ? 5.8 : 0; // inside the bunker, walls stop fire
     return terrain(x, z);
   }
   const btGroundMat = shader({ ...U, uRed: { value: 0 } }, `uniform float uRed;
@@ -781,26 +790,90 @@
     dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1);
     hog.frustumCulled = false; battle.add(hog);
   }
-  // the bunker: concrete walls, a sealed door, a terminal and the jack port inside
-  const bunkerMat = shader({ ...U }, `void main(){
+  // the satellite uplink bunker: a concrete block laid out from a map (3 m cells), a dish and antennas on the roof,
+  // corridors with guards (G), ceiling turrets (T) and tripwires (L), and the mainframe room (M cabinets, J the jack port)
+  const BMAP = [
+    "######D######",
+    "#...#...#...#",
+    "#.G.#...#.T.#",
+    "#...##.##...#",
+    "#.....L.....#",
+    "###.#####.###",
+    "#...#...#...#",
+    "#.G.#.T.#.G.#",
+    "#...........#",
+    "#####.#.#####",
+    "#T....L....T#",
+    "#.####.####.#",
+    "#.#.......#.#",
+    "#.#.G...G.#.#",
+    "#...........#",
+    "####.###.####",
+    "#MMM.....MMM#",
+    "#MMM..J..MMM#",
+    "#############",
+  ];
+  const BC = 3, BCOLS = 13, BROWS = BMAP.length, BDOOR = { open: false };
+  const cellX = (c) => (c - (BCOLS - 1) / 2) * BC, cellZ = (r) => BT.bz - (r + 0.5) * BC;
+  const bcell = (x, z) => { const c = Math.floor((x + (BCOLS * BC) / 2) / BC), r = Math.floor((BT.bz - z) / BC); return c < 0 || c >= BCOLS || r < 0 || r >= BROWS ? null : BMAP[r][c]; };
+  const bsolid = (x, z) => { const ch = bcell(x, z); return ch === "#" || ch === "M" || (ch === "D" && !BDOOR.open); };
+  const bsolidR = (x, z, r = 0.35) => bsolid(x, z) || bsolid(x + r, z) || bsolid(x - r, z) || bsolid(x, z + r) || bsolid(x, z - r);
+  function losClear(x0, z0, x1, z1) { const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.6); for (let i = 1; i < n; i++) if (bsolid(lerp(x0, x1, i / n), lerp(z0, z1, i / n))) return false; return true; }
+  const bunkerWallMat = shader({ ...U }, `void main(){
       vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
       vec2 c = abs(n.y) > 0.5 ? vWorld.xz : (abs(n.z) > 0.5 ? vWorld.xy : vWorld.zy);
-      float e = boxEdge(vUv, 1.5), g = gridL(c / 1.5);
-      vec3 col = vec3(0.45, 0.95, 0.6) * (0.06 + g * 0.12 + e * 0.8);
+      float cell = gridL((c + 1.5) / 3.0), minor = gridL(c / 0.75);
+      vec3 col = vec3(0.45, 0.95, 0.6) * (0.05 + minor * 0.08 + cell * 0.75) * (abs(n.y) > 0.5 ? 1.2 : 0.8);
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`);
   const bunker = new THREE.Group(); battle.add(bunker);
+  const tripwires = [], bunkerSpots = { G: [], T: [], J: null };
   {
-    const B0 = BT.bz, box = (x0, x1, y0, y1, z0, z1) => { const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z0 - z1), bunkerMat); m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); bunker.add(m); };
-    box(-8, -1.5, 0, 5, B0, B0 - 0.8); box(1.5, 8, 0, 5, B0, B0 - 0.8); box(-1.5, 1.5, 3, 5, B0, B0 - 0.8);
-    box(-8.8, -8, 0, 5, B0, B0 - BT.bd); box(8, 8.8, 0, 5, B0, B0 - BT.bd); box(-8.8, 8.8, 0, 5, B0 - BT.bd, B0 - BT.bd - 0.8);
-    box(-9.6, 9.6, 5, 5.9, B0 + 0.8, B0 - BT.bd - 1.4);
-    box(-1.0, 1.0, 0, 1.1, B0 - 8.6, B0 - 9.6); // terminal
+    const parts = [];
+    BMAP.forEach((row, r) => [...row].forEach((ch, c) => {
+      if (ch === "#") parts.push([new THREE.BoxGeometry(BC, 5, BC), mat4(cellX(c), 2.5, cellZ(r))]);
+      if (ch === "G" || ch === "T") bunkerSpots[ch].push([cellX(c), cellZ(r)]);
+      if (ch === "J") bunkerSpots.J = [cellX(c), cellZ(r)];
+    }));
+    parts.push([new THREE.BoxGeometry(BCOLS * BC + 1.6, 0.8, BROWS * BC + 1.6), mat4(0, 5.4, BT.bz - (BROWS * BC) / 2)]); // roof
+    const walls = new THREE.Mesh(mergeGeos(parts), bunkerWallMat); bunker.add(walls);
+    // mainframe cabinets: tall boxes of blinking lights
+    const ms = []; BMAP.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === "M") ms.push([cellX(c), cellZ(r)]); }));
+    const cab = new THREE.InstancedMesh(unitBox, towerMat, ms.length); cab.frustumCulled = false;
+    ms.forEach(([x, z], i) => { dummy.position.set(x, 2.1, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(2.7, 4.2, 2.7); dummy.updateMatrix(); cab.setMatrixAt(i, dummy.matrix); cab.setColorAt(i, new C3(i % 3 ? 0x35e6ff : 0x7a5cff)); });
+    dummy.scale.setScalar(1); bunker.add(cab);
+    // tripwires: a red beam across the whole open stretch of the row
+    BMAP.forEach((row, r) => [...row].forEach((ch, c) => {
+      if (ch !== "L") return;
+      let c0 = c, c1 = c; while (c0 > 0 && row[c0 - 1] !== "#") c0--; while (c1 < BCOLS - 1 && row[c1 + 1] !== "#") c1++;
+      const x0 = cellX(c0) - BC / 2, x1 = cellX(c1) + BC / 2, beam = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, blending: ADD, depthWrite: false }));
+      beam.position.set((x0 + x1) / 2, 0.45, cellZ(r)); bunker.add(beam); tripwires.push({ z: cellZ(r), x0, x1, beam, tripped: false });
+    }));
+    // the jack chair in front of the port
+    const [jx, jz] = bunkerSpots.J, chair = mergeGeos([[new THREE.BoxGeometry(1.2, 0.5, 1.2), mat4(jx, 0.5, jz)], [new THREE.BoxGeometry(1.2, 1.4, 0.25), mat4(jx, 1.2, jz - 0.6)]]);
+    bunker.add(new THREE.Mesh(chair, bunkerWallMat));
+  }
+  // on the roof: the uplink dish and antenna masts with blinking lights
+  const dish = new THREE.Group(); dish.position.set(9, 5.8, BT.bz - 20); bunker.add(dish);
+  {
+    const lm = new THREE.LineBasicMaterial({ color: 0x9fffb0 }), pts = []; for (let i = 0; i <= 12; i++) { const r = (i / 12) * 6; pts.push(new THREE.Vector2(r, (r * r) / 12)); }
+    const bowl = new THREE.LatheGeometry(pts, 24); const bowlM = new THREE.Mesh(bowl, new THREE.MeshBasicMaterial({ color: 0x163a22, side: THREE.DoubleSide })); bowlM.add(new THREE.LineSegments(new THREE.EdgesGeometry(bowl, 1), lm));
+    const head = new THREE.Group(); head.position.y = 3; head.rotation.x = -0.8; head.add(bowlM);
+    const feed = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4, 6), new THREE.MeshBasicMaterial({ color: 0x9fffb0 })); feed.position.y = 2; head.add(feed);
+    dish.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 3, 8), bunkerWallMat).translateY(1.5), head); dish.userData.head = head;
+  }
+  const mastLights = [];
+  for (const [x, z, h] of [[-16, -4, 18], [16, -6, 14], [-15, -44, 16], [15, -48, 20], [0, -38, 12]]) {
+    const g = new THREE.Group(); g.position.set(x, 5.8, BT.bz + z);
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, h, 0.3), bunkerWallMat).translateY(h / 2));
+    for (let k = 1; k < 4; k++) g.add(new THREE.Mesh(new THREE.BoxGeometry(2.2 - k * 0.5, 0.12, 0.12), bunkerWallMat).translateY((h * k) / 4));
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a3a, fog: false, transparent: true })); light.position.y = h + 0.3; g.add(light); mastLights.push(light);
+    bunker.add(g);
   }
   const doorMat = new THREE.MeshBasicMaterial({ color: 0x3a0610 });
   const bunkerDoor = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 0.3), doorMat);
   const doorEdge = new THREE.LineSegments(new THREE.EdgesGeometry(bunkerDoor.geometry), new THREE.LineBasicMaterial({ color: 0xff3a5c }));
-  bunkerDoor.add(doorEdge); bunkerDoor.position.set(0, 1.5, BT.bz - 0.4); battle.add(bunkerDoor);
+  bunkerDoor.add(doorEdge); bunkerDoor.position.set(0, 1.5, BT.bz - 0.4); bunker.add(bunkerDoor);
   // the door's keypad shows the code digits you've found
   const keypad = (() => {
     const c = document.createElement("canvas"); c.width = 512; c.height = 192; const tex = new THREE.CanvasTexture(c);
@@ -812,8 +885,9 @@
       tex.needsUpdate = true;
     } };
   })();
-  const termScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ color: 0x35e6ff })); termScreen.position.set(0, 1.6, BT.bz - 8.5); termScreen.rotation.x = -0.3; battle.add(termScreen);
-  const jackPort = makePortal(0x35e6ff, 1.5); jackPort.position.set(0, 2.4, BT.bz - BT.bd + 0.2);
+  const termScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ color: 0x35e6ff })); termScreen.position.set(bunkerSpots.J[0] + 2.2, 1.6, bunkerSpots.J[1]); termScreen.rotation.y = -Math.PI / 2; bunker.add(termScreen);
+  const JACK = new V3(bunkerSpots.J[0], 2.4, BT.bz - (BROWS - 1) * BC + 0.2); // the port on the back wall of the mainframe room
+  const jackPort = makePortal(0x35e6ff, 1.5); jackPort.position.copy(JACK);
   // threats: soldiers popping up in trenches, machine-gun nests, a tank
   const redFill = new THREE.MeshPhongMaterial({ color: 0x8a1020, emissive: 0x2a0006, flatShading: true }), redEdge = new THREE.LineBasicMaterial({ color: 0xff5a6a, transparent: true, opacity: 0.95, blending: ADD, depthWrite: false });
   const soldierGeo = mergeGeos([
@@ -835,6 +909,8 @@
       if (kind === "soldier") { T.body = threatHull(soldierGeo); g.add(T.body); T.max = 2; }
       if (kind === "mg") { g.add(threatHull(nestGeo)); T.gun = threatHull(mgGeo); T.gun.position.y = 1.05; g.add(T.gun); T.max = 6; g.position.set(x, terrain(x, z), z); }
       if (kind === "rec") { const h = new THREE.Group(); h.add(new THREE.Mesh(recGeo, recFill)); h.add(new THREE.LineSegments(new THREE.EdgesGeometry(recGeo, 15), recEdge)); g.add(h); T.max = 16; T.trig = z; }
+      if (kind === "guard") { T.body = threatHull(soldierGeo); g.add(T.body); T.max = 3; g.position.set(x, 0, z); }
+      if (kind === "turret") { g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 6), redFill).translateY(4.6)); T.gun = threatHull(mgGeo); T.gun.position.y = 4.05; g.add(T.gun); T.max = 4; g.position.set(x, 0, z); }
       if (kind === "tank") { g.add(threatHull(tankGeo)); T.gun = threatHull(turretGeo); T.gun.position.y = 1.75; g.add(T.gun); T.max = 14; T.amp = rand(10, BT.hw - 3); }
       T.hp = T.max; threats.push(T);
     };
@@ -845,6 +921,7 @@
       line(i, spread(4 + Math.round(p * 4), BT.hw - 3), i === 1 ? [] : spread(1 + Math.round(p * 2), BT.hw - 6), i === last);
     }
     BT.tanks.forEach((z, k) => add("tank", 0, z, k === BT.tanks.length - 1));
+    bunkerSpots.G.forEach(([x, z]) => add("guard", x, z)); bunkerSpots.T.forEach(([x, z]) => add("turret", x, z)); // inside the bunker
     for (let k = 0; k < 5; k++) add("rec", k % 2 ? 1 : -1, Math.round(lerp(-110, BT.bz + 120, k / 4))); // Recognizers from another grid, drifting in over the battlefield
   }
   // HUD: brackets on every threat, a waypoint over the bunker
@@ -925,6 +1002,23 @@
       friendlies.push({ c, tag, x0: x, z0: z, x, z, st: "held", t: 0, ph: rand(0, TAU) });
     }
   }
+  // the enemy space laser: an orbital platform over the battlefield, fed by the bunker's dish
+  const SLM = { fill: new THREE.MeshBasicMaterial({ color: 0x1a0610, fog: false }), edge: new THREE.LineBasicMaterial({ color: 0xff5a6a, fog: false }) };
+  const spaceLaser = new THREE.Group(); spaceLaser.position.set(70, 260, BT.bz * 0.55); battle.add(spaceLaser);
+  {
+    const part = (geo, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, SLM.fill); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 15), SLM.edge)); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); spaceLaser.add(m); return m; };
+    part(new THREE.IcosahedronGeometry(12, 1), 0, 0, 0); part(new THREE.TorusGeometry(38, 2, 6, 40), 0, 0, 0, Math.PI / 2);
+    for (const sx of [-1, 1]) part(new THREE.BoxGeometry(60, 1, 18), sx * 72, 0, 0);
+    part(new THREE.CylinderGeometry(2.5, 4.5, 80, 8), 0, -44, 18, -0.4);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a3a, fog: false })); tip.position.set(0, -80, 34); spaceLaser.add(tip); spaceLaser.userData.tip = tip;
+  }
+  const uplinkBeam = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new V3(), new V3()]), new THREE.LineBasicMaterial({ color: 0x35e6ff, fog: false, transparent: true })); uplinkBeam.frustumCulled = false; battle.add(uplinkBeam);
+  const laserBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xff3a3a, fog: false, transparent: true, blending: ADD, depthWrite: false })); laserBeam.visible = false; battle.add(laserBeam);
+  const blasts = [0, 1, 2, 3].map(() => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffb04a, fog: false, transparent: true, blending: ADD, depthWrite: false })); m.visible = false; battle.add(m); return { m, t: 0, on: false, max: 1, dur: 1 }; });
+  const debris = Array.from({ length: 28 }, () => { const m = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 6), SLM.fill.clone()); m.material.color.set(0xff8a1f); m.visible = false; battle.add(m); return { m, v: new V3(), w: new V3(), t: 0 }; });
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(9, 14, 70, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7a1f, fog: false, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); pillar.visible = false; battle.add(pillar);
+  const homeBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 60, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false, transparent: true, opacity: 0.5, blending: ADD, depthWrite: false })); homeBeam.visible = false; battle.add(homeBeam);
+  function blast(p, max, dur, col) { const b = blasts.find((q) => !q.on) || blasts[0]; Object.assign(b, { on: true, t: 0, max, dur }); b.m.position.copy(p); b.m.material.color.set(col); b.m.visible = true; }
   // the odd Space Paranoid crossing overhead, dropping bombs; a ring marks where each one will land
   const btShips = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
   const bombs = [0, 1, 2, 3, 4, 5].map(() => { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xff8a1f })); b.visible = false; battle.add(b); return { b, on: false, x: 0, y: 0, z: 0, vy: 0, ring: null }; });
@@ -936,7 +1030,7 @@
   })();
   const flares = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xeaffd0, fog: false }))); const sp = new THREE.Sprite(flareGlow); sp.scale.setScalar(9); g.add(sp); battle.add(g); return g; });
 
-  // ---- Beijing Uplink: Johnny's data cube, twisted with your hands (or a controller / mouse)
+  // ---- Open the Line: Johnny's data cube, twisted with your hands (or a controller / mouse)
   const uplink = new THREE.Group(); uplink.visible = false; runScene.add(uplink);
   const cubeRoot = new THREE.Group(); uplink.add(cubeRoot);
   const CS = 0.12, CUBIE = 0.108, AXV = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
@@ -989,10 +1083,10 @@
   // your hands, drawn as glowing joints (the data gloves)
   const handDots = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.009, 0), new THREE.MeshBasicMaterial({ fog: false }), 60);
   handDots.frustumCulled = false; handDots.visible = false; uplink.add(handDots); handDots.setColorAt(0, new C3(1, 1, 1));
-  // backdrop: a wireframe globe with Beijing lit, slow rings, a grid floor
+  // backdrop: a wireframe globe with the hacker's node lit, slow rings, a grid floor
   const upGlobe = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.SphereGeometry(5, 18, 12)), new THREE.LineBasicMaterial({ color: 0x35e6ff, transparent: true, opacity: 0.35, fog: false }));
   upGlobe.position.set(0, 2.5, -16); uplink.add(upGlobe);
-  const upBeijing = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a52, fog: false })); upBeijing.position.set(3.2, 2.4, 3.4); upGlobe.add(upBeijing);
+  const upNode = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a52, fog: false })); upNode.position.set(3.2, 2.4, 3.4); upGlobe.add(upNode);
   const upRings = [0.42, 0.5].map((r, i) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.003, 4, 64), new THREE.MeshBasicMaterial({ color: i ? 0xff47d4 : 0x35e6ff, transparent: true, opacity: 0.6 })); cubeRoot.parent.add(m); return m; });
   const upFloor = new THREE.Mesh(new THREE.CircleGeometry(30, 48), makeFloorMat(U, 0x35e6ff, 0x7a5cff, 0)); upFloor.rotation.x = -Math.PI / 2; uplink.add(upFloor);
 
@@ -1017,7 +1111,7 @@
   });
   const B = { on: false, st: "", t: 0, fireT: 0, pat: 0, x: 0, y: 9, blocks: bossSlots.map((s) => ({ slot: s, from: new V3(), cur: new V3(), vel: new V3(), rot: new V3(), spin: new V3(), delay: 0, free: false, fade: 1, s: 1 })), hp: [0, 0, 0] };
 
-  // ---- phone gates (Call Beijing): three digit rings per gate
+  // ---- phone gates (Long Distance): three digit rings per gate
   const digitTex = Array.from({ length: 10 }, (_, d) => {
     const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
     g.fillStyle = "#ffffff"; g.font = `200px ${FONT}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String(d), 128, 140);
@@ -1297,6 +1391,8 @@
       trap: { bpm: 92, bass: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6, 7], roots: [0, 0, 1, 0], arp: [0, 6, 12, 13, 12, 6, 1, 0] },
       battle: { bpm: 96, bass: [0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, -2, 0, -2, 0], roots: [0, 0, -4, -5], arp: [0, 7, 12, 7, 3, 7, 12, 15] },
       gauntlet: { bpm: 130, bass: [0, 0, 0, 12, 0, 0, 10, 0, 0, 0, 0, 12, 0, 7, 10, 12], roots: [0, -3, -5, -7], arp: [0, 3, 7, 12, 15, 12, 7, 3] },
+      bunker: { bpm: 100, bass: [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 3, 0, 1, 0, 0, 0], roots: [0, 0, -2, -1], arp: [0, 3, 6, 3, 0, 3, 6, 10] },
+      escape: { bpm: 148, bass: [0, 12, 0, 12, 0, 12, 3, 15, 5, 17, 5, 17, 3, 15, 2, 14], roots: [0, -2, -3, -5], arp: [0, 7, 12, 15, 19, 15, 12, 7] },
       uplink: { bpm: 84, bass: [0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 5, 0, 3, 0], roots: [0, -2, -5, -7], arp: [0, 12, 7, 15, 12, 19, 15, 24] },
       polybius: { bpm: 138, bass: [0, 12, 0, 12, 3, 15, 3, 15, 5, 17, 5, 17, 7, 19, 10, 22], roots: [0, -2, -4, -5], arp: [0, 7, 12, 15, 19, 24, 19, 15] },
     };
@@ -1427,11 +1523,27 @@
   const vrHud = canvasPlane(1024, 240, 1.0);
   const vrMsg = canvasPlane(1024, 256, 2.2);
   const vrTitle = canvasPlane(1024, 400, 4.2);
+  const vrBrief = canvasPlane(1024, 600, 2.4);
+  function wrapText(g, text, x, y, w, lh) { let line = ""; for (const word of text.split(" ")) { if (g.measureText(line + word).width > w && line) { g.fillText(line, x, y); y += lh; line = ""; } line += word + " "; } g.fillText(line, x, y); return y; }
+  // chapter briefing: freezes the action until you confirm (or it times out)
+  function showBrief(kicker, title, text, col, hint) {
+    R.briefT = R.briefMax = 12;
+    $("briefK").textContent = kicker; $("briefT").textContent = title; $("briefT").style.color = col; $("briefP").textContent = text;
+    $("briefH").textContent = hint || (renderer.xr.isPresenting ? "Pull the trigger to begin" : "Click or press Space to begin");
+    $("brief").hidden = renderer.xr.isPresenting; $("msg").style.opacity = 0; vrMsg.m.visible = false;
+    const g = vrBrief.g; g.clearRect(0, 0, 1024, 600); g.fillStyle = "rgba(9,5,22,0.92)"; g.fillRect(0, 0, 1024, 600); g.strokeStyle = col; g.lineWidth = 4; g.strokeRect(2, 2, 1020, 596);
+    g.textAlign = "left"; g.fillStyle = COL.dim; g.font = `28px ${FONT}`; g.fillText(kicker.toUpperCase(), 48, 70);
+    g.fillStyle = col; g.font = `60px ${DFONT}`; g.fillText(title.toLowerCase(), 48, 150);
+    g.fillStyle = COL.ink; g.font = `32px ${FONT}`; wrapText(g, text, 48, 222, 928, 44);
+    g.fillStyle = COL.dim; g.font = `26px ${FONT}`; g.fillText((hint || "Pull the trigger to begin").toUpperCase(), 48, 560);
+    vrBrief.tex.needsUpdate = true; vrBrief.m.visible = renderer.xr.isPresenting;
+  }
+  function hideBrief() { if (R) R.briefT = 0; $("brief").hidden = true; vrBrief.m.visible = false; }
   function drawVrTitle() {
     const { g, c } = vrTitle; g.clearRect(0, 0, c.width, c.height);
     g.textAlign = "center"; g.fillStyle = COL.cyan; g.shadowColor = COL.cyan; g.shadowBlur = 30;
     g.font = `150px ${DFONT}`; g.fillText("datasphere", 512, 190);
-    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("JACK IN · 8 LEVELS", 512, 262);
+    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("ONE MISSION · 10 CHAPTERS", 512, 262);
     g.fillStyle = COL.ink; g.font = `38px ${FONT}`; g.fillText("pull the trigger to enter the hub", 512, 344);
     vrTitle.tex.needsUpdate = true;
   }
@@ -2131,7 +2243,8 @@
   const LEVELS = [
     { // ---------------------------------------------------------------- 01
       id: "battle", num: "01", name: "Simian Battlefield", col: COL.heal, music: "battle", ground: true, ownIntro: true, aimDist: 40,
-      blurb: "The combat sim. Your HUD marks every threat. Cross the trenches, take the bunker, then jack into the net.",
+      blurb: "Cross the battlefield, find the four code digits, reach the satellite uplink bunker.",
+      brief: "The enemy's space lasers answer to a satellite uplink bunker deep behind their lines. Cross the battlefield, find the four code digits for its door, and get inside. Free any of ours you find on the way, and don't shoot them.",
       init() {
         setEnv("battle");
         A.x = 0; A.z = 0; A.y = -BT.depth + 1.2; A.vx = A.vy = 0; prev.set(A.x, A.y, A.z);
@@ -2150,6 +2263,10 @@
         btShips.forEach((S2) => { S2.on = false; S2.g.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
         flares.forEach((f, i) => f.position.set(rand(-25, 25), 20 + i * 9, rand(-30, -90)));
         bunkerDoor.position.y = 1.5; doorEdge.material.color.set(0xff3a5c); jackPort.visible = true;
+        R.face = 0; R.alarm = 0; R.laserT = rand(10, 18); R.slT = -1; R.flash = 0; BDOOR.open = false; BDOOR.gone = false;
+        bunker.visible = spaceLaser.visible = uplinkBeam.visible = true; pillar.visible = homeBeam.visible = laserBeam.visible = false;
+        blasts.forEach((b) => { b.on = false; b.m.visible = false; }); debris.forEach((d) => { d.t = 0; d.m.visible = false; });
+        tripwires.forEach((w) => { w.tripped = false; w.beam.visible = true; }); R.fogBase0 = R.fogBase.clone();
         BT.trenches.slice(1).forEach((tz) => spawnPacket(rand(-6, 6), -1, tz, 1, true));
         rig.position.set(A.x, A.y - 0.2, A.z + 4.4);
         showMsg("SIMIAN BATTLEFIELD", renderer.xr.isPresenting ? "left stick moves · A jumps mines and wire · trigger fires · stand still in a trench to peek" : "WASD moves · Space jumps mines and wire · click fires · stand still in a trench to peek", COL.heal, 4);
@@ -2159,12 +2276,54 @@
         const left = threats.filter((T) => T.on && T.st !== "wait").length, d = Math.max(0, Math.round(A.z - BT.bz)), prog = 1 - d / -BT.bz;
         const code = R.code.map((c, i) => (R.got[i] ? c : "_")).join(" "), have = R.got.filter(Boolean).length;
         if (R.stage === "advance") return { label: `Threats ${left} · code ${code} · freed ${R.freed}`, text: have < 4 ? (R.hunt ? `Find the missing code digits · follow the violet beams · ${have} / 4` : `Find the 4 code digits · reach the bunker · ${d} m`) : `Code complete · reach the bunker · ${d} m`, prog };
-        if (R.stage === "open") return { label: `Threats ${left}`, text: "Bunker open · get inside and jack in", prog };
+        if (R.stage === "open") return { label: `Threats ${left}`, text: "Bunker open · get inside", prog };
+        if (R.stage === "inside") return { label: R.alarm > 0 ? "ALARM · guards alerted" : "Uplink bunker", text: `Reach the mainframe room and jack in · ${Math.round(Math.hypot(A.x - JACK.x, A.z - JACK.z))} m`, prog: 1 - clamp((A.z - JACK.z) / (BT.bz - JACK.z), 0, 1) };
+        if (R.stage === "escape") return { label: `SELF-DESTRUCT ${Math.ceil(R.selfT)} s`, text: "Get out of the bunker", prog: clamp((A.z - JACK.z) / (BT.bz - JACK.z), 0, 1) };
+        if (R.stage === "out") return { label: `SELF-DESTRUCT ${Math.ceil(R.selfT)} s`, text: "Get clear of the bunker", prog: clamp((A.z - BT.bz) / 60, 0, 1) };
+        if (R.stage === "home") return { label: `Freed ${R.freed}`, text: `Run home to our lines · ${Math.max(0, Math.round(R.homeZ - A.z))} m`, prog: clamp((A.z - BT.bz) / (R.homeZ - BT.bz), 0, 1) };
+        if (R.stage === "done") return { label: "Home", text: "Mission complete", prog: 1 };
         return { label: "Bunker", text: "Jacking in…", prog: 1 };
       },
       onRespawn() {
         A.z = R.cp; A.y = R.by = groundAt(A.x, R.cp) + 1.2; R.jumping = false; R.vy = 0; A.vx = 0; R.vz = R.walk = 0; prev.set(A.x, A.y, A.z);
         mortars.forEach((m) => { m.on = false; m.m.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
+      },
+      enterBunker() { // chapter 2 starts as you step through the door, without a loading break
+        const r = lrec("battle"); r.clears++; r.best = r.best === null ? R.time : Math.min(r.best, R.time); r.data = Math.max(r.data, Math.floor(R.data));
+        const bi = LEVELS.indexOf(BUNKER); rec.unlocked = Math.max(rec.unlocked, bi); lrec("bunker").tries++; rec.last = `Battlefield crossed in ${fmtTime(R.time)} · ${R.freed} freed`; save();
+        Object.assign(R, { L: BUNKER, li: bi, id: "bunker", time: 0, stage: "inside", cp: A.z }); Sound.track(BUNKER.music);
+        showBrief(`Chapter ${BUNKER.num} of ${LEVELS.length}`, BUNKER.name, BUNKER.brief, BUNKER.col);
+      },
+      blowLaser() { // the backdoor worked: the space laser tears itself apart overhead
+        const p = spaceLaser.position.clone(); R.slT = 0; R.slP = p;
+        spaceLaser.visible = uplinkBeam.visible = laserBeam.visible = false; blast(p, 110, 3, 0xffe2a0);
+        debris.forEach((d) => { d.t = rand(5, 9); d.m.visible = true; d.m.position.copy(p); d.v.set(rand(-1, 1), rand(-0.4, 1), rand(-1, 1)).normalize().multiplyScalar(rand(30, 90)); d.w.set(rand(-3, 3), rand(-3, 3), 0); });
+        R.flash = 1; Sound.boom(true); pulse(0.6, 300); showMsg("LOOK UP", "the space laser is tearing itself apart", COL.amber, 3.5);
+      },
+      blowBunker() { // and the bunker goes up behind you
+        BDOOR.gone = true; bunker.visible = jackPort.visible = uplinkBeam.visible = false; Sound.alarm(false);
+        const c = new V3(0, 3, BT.bz - (BROWS * BC) / 2);
+        for (let k = 0; k < 10; k++) burst(c.x + rand(-18, 18), rand(1, 9), c.z + rand(-26, 26), k % 2 ? C_RED : C_ORANGE, 60);
+        shatterCube(c.x, 4, c.z, C_HEAL, 40); blast(c, 50, 2.6, 0xffb04a); pillar.position.set(c.x, 35, c.z); pillar.userData.t = 0; pillar.scale.setScalar(1); pillar.visible = true;
+        Sound.boom(true); pulse(1, 500); R.flash = Math.max(R.flash, 0.8);
+        if (alive() && Math.hypot(A.x - c.x, A.z - c.z) < 55) killNow("burn");
+        R.stage = "home"; showMsg("BUNKER DESTROYED", "now run home · our lines are at the green beam", COL.heal, 3.5);
+      },
+      escapeStep(dt, t, live) {
+        if (R.stage !== "home") R.selfT -= dt;
+        if (R.stage === "escape" && A.z > BT.bz + 1.5) { R.stage = "out"; this.blowLaser(); }
+        if (R.slT >= 0) { // secondary explosions across the platform
+          const prevT = R.slT; R.slT += dt;
+          for (const [at, size, col] of [[0.5, 70, 0xff8a1f], [1.1, 90, 0xff3a3a], [1.8, 60, 0xffc24a], [2.6, 120, 0xfff0c0]]) if (prevT < at && R.slT >= at) { blast(R.slP.clone().add(new V3(rand(-40, 40), rand(-20, 20), rand(-30, 30))), size, 2.2, col); Sound.boom(true); R.flash = Math.max(R.flash, 0.6); }
+          if (R.slT > 4) R.slT = -1;
+        }
+        if (!BDOOR.gone && R.selfT <= 0) this.blowBunker();
+        homeBeam.visible = R.stage === "home" || R.stage === "out"; homeBeam.position.set(0, groundAt(0, R.homeZ) + 30, R.homeZ);
+        if (R.stage === "home" && live && A.z > R.homeZ && !R.over) {
+          R.stage = "done"; homeBeam.visible = false; Sound.connected();
+          levelComplete("HOME", `${R.freed} freed · ${R.kills} threats down · ${fmtTime(R.time)}`); R.overT = R.overMax = 4;
+          showBrief("Mission complete", "You won", `The space lasers are burning up across the sky and the uplink bunker is a smoking crater. You made it home${R.freed ? `, and brought ${R.freed} of ours with you` : ""}. Game over.`, COL.heal, renderer.xr.isPresenting ? "Pull the trigger to return to base" : "Click or press Space to return to base");
+        }
       },
       boltHit(a, b) { // your bolts hit friendlies too: they shatter and it costs you
         for (const F of friendlies) {
@@ -2188,7 +2347,7 @@
       },
       kill(T, x, y) {
         T.on = false; T.g.visible = false; R.kills++;
-        R.data += T.kind === "tank" ? 25 : T.kind === "rec" ? 20 : T.kind === "mg" ? 10 : 4; R.god = Math.min(100, R.god + (T.kind === "soldier" ? 6 : 14));
+        R.data += T.kind === "tank" ? 25 : T.kind === "rec" ? 20 : T.kind === "mg" ? 10 : T.kind === "turret" ? 8 : 4; R.god = Math.min(100, R.god + (T.kind === "soldier" ? 6 : 14));
         burst(x, y, T.z, C_ORANGE, T.kind === "soldier" ? 30 : 60); shatterCube(x, y, T.z, C_RED, T.kind === "soldier" ? 12 : 24); Sound.boom(T.kind !== "soldier");
         if (T.kind === "tank") { for (let k = 0; k < 4; k++) burst(x + rand(-2, 2), rand(0.5, 3), T.z + rand(-2, 2), k % 2 ? C_RED : C_ORANGE, 40); showMsg("TANK DOWN", "", COL.amber, 1.4); }
         if (T.kind === "rec") { for (let k = 0; k < 5; k++) burst(x + rand(-5, 5), y + rand(-3, 4), T.z + rand(-2, 2), k % 2 ? C_RED : C_ORANGE, 40); shatterCube(x, y, T.z, C_RED, 30); showMsg("RECOGNIZER DOWN", "+20 GB", COL.amber, 1.6); }
@@ -2198,7 +2357,9 @@
         const live = alive(), xr = renderer.xr.isPresenting, jack = R.stage === "jack", L = this;
         R.speed = 0;
         // movement: stick or keys; in the headset, forward is wherever you're looking
-        let fx = 0, fz = -1;
+        let fx = -Math.sin(R.face), fz = -Math.cos(R.face); // forward: into the field, or home again in the escape
+        const dirZ = R.face ? -1 : 1;
+        BDOOR.open = R.stage !== "advance";
         if (xr) { const f = tmpV.set(0, 0, -1).applyQuaternion(camera.quaternion), l = Math.hypot(f.x, f.z); if (l > 0.2) { fx = f.x / l; fz = f.z / l; } }
         const go = live && !jack ? IN.y : 0, side = live && !jack ? IN.x : 0;
         const sp = (go > 0 ? (IN.boost ? 9.5 : 6) : 3.5) * (R.wireT > 0 ? 0.3 : 1);
@@ -2208,12 +2369,8 @@
         A.x = clamp(A.x + A.vx * dt, -BT.hw, BT.hw); A.z = Math.min(2, A.z + R.vz * dt);
         const B0 = BT.bz;
         if (!jack) {
-          // the bunker is solid apart from its doorway, which stays shut until the guard is down
-          const inX = Math.abs(A.x) < 1.0;
-          if (prev.z >= B0 + 0.6 && A.z < B0 + 0.6 && (R.stage === "advance" || !inX)) A.z = B0 + 0.6;
-          if (prev.z < B0 - 0.9 && A.z >= B0 - 0.9 && !inX) A.z = B0 - 0.9;
-          if (A.z < B0 + 0.6 && A.z > B0 - 0.9) A.x = clamp(A.x, -1, 1);
-          if (A.z <= B0 - 0.9) { A.x = clamp(A.x, -7.4, 7.4); A.z = Math.max(A.z, B0 - BT.bd + 1.6); }
+          // the bunker: walls and cabinets are solid, and so is the door until the code is in
+          if (!BDOOR.gone) { if (bsolidR(A.x, prev.z)) A.x = prev.x; if (bsolidR(A.x, A.z)) A.z = prev.z; }
           // ground height: duck while moving in a trench, stand on the fire step to peek when still
           R.walk = Math.hypot(A.vx, R.vz);
           const tz0 = inTrench(A.z), gy = tz0 === undefined ? terrain(A.x, A.z) + 1.2 : R.walk < 1.2 ? 0.2 : 1.2 - BT.depth;
@@ -2225,7 +2382,7 @@
             R.by += (gy - R.by) * Math.min(1, dt * (gy > R.by ? 4.5 : 10)); A.y = R.by;
             if (IN.jump && live && Math.abs(gy - R.by) < 0.4) { R.jumping = true; R.vy = 7; Sound.whoosh(); }
           }
-          if (live && tz0 !== undefined && tz0 < R.cp) R.cp = tz0;
+          if (live && tz0 !== undefined && (R.face ? tz0 > R.cp : tz0 < R.cp)) R.cp = tz0;
         }
         R.stepPh += dt * (2 + R.walk * 1.3);
         Sound.intensity = clamp(0.25 + R.walk / 14 + (R.stage !== "advance" ? 0.3 : 0), 0, 1);
@@ -2234,14 +2391,24 @@
           if (Math.abs(A.z - wz) > 0.7 || A.y - R.gy > 0.7 || BT.gaps[i].some(([a, b]) => A.x > a + 0.3 && A.x < b - 0.3)) return;
           R.wireT = 0.5; if (R.wireHit <= 0) { R.wireHit = 0.7; damage(8, "BARBED WIRE", A.x, A.y, A.z); }
         });
+        // tripwires in the bunker: jump them, or the alarm goes and every guard and turret fires faster
+        R.alarm = Math.max(0, R.alarm - dt);
+        for (const w of tripwires) {
+          w.beam.material.opacity = 0.5 + 0.5 * Math.sin(t * 9 + w.z);
+          if (live && !jack && !BDOOR.gone && (prev.z - w.z) * (A.z - w.z) <= 0 && prev.z !== A.z && A.x > w.x0 && A.x < w.x1 && A.y - R.gy < 0.5) {
+            R.alarm = 25; Sound.alarm(true); setTimeout(() => R && R.alarm <= 0 && R.stage !== "escape" && R.stage !== "out" && Sound.alarm(false), 25500);
+            damage(20, "TRIPWIRE", A.x, A.y, A.z); showMsg("TRIPWIRE", "alarm · every guard knows you're here · jump the red beams", COL.alarm, 2.2);
+          }
+        }
         // threats
         let guardLeft = 0;
+        const inBunker = !BDOOR.gone && bcell(A.x, A.z) !== null; // under the roof: nothing outside can see you
         for (const T of threats) {
           if (!T.on) continue;
           if (T.guard) guardLeft++;
           if (T.kind !== "rec") { const near = Math.abs(A.z - T.z) < 150; T.g.visible = near; if (!near) continue; } // only the nearby part of the 1.8 km field is live
           T.flash = Math.max(0, T.flash - dt * 4); T.t -= dt;
-          const ahead = A.z - T.z, active = live && !jack && ahead > -1.5 && ahead < (T.kind === "soldier" ? 75 : 95);
+          const ahead = (A.z - T.z) * dirZ, active = live && !jack && !inBunker && ahead > -1.5 && ahead < (T.kind === "soldier" ? 75 : 95);
           let cx = T.g.position.x, cy = T.g.position.y + 0.9, cr = 1.3;
           if (T.kind === "soldier") {
             if (T.t <= 0) { if (T.st === "down") { if (active) { T.st = "up"; T.fireT = rand(0.5, 1.2); } T.t = rand(2, 3.4); } else { T.st = "down"; T.t = rand(1.4, 3.2); } }
@@ -2257,15 +2424,26 @@
               if (T.fireT <= 0 && T.burst <= 0) T.burst = 5;
               if (T.burst > 0 && T.fireT <= 0) { T.burst--; T.fireT = T.burst > 0 ? 0.12 : rand(2.4, 3.4); const yw = T.gun.rotation.y; enemyFire(btV.set(T.x + Math.sin(yw) * 1.6, T.g.position.y + 1.1, T.z + Math.cos(yw) * 1.6), 1, 0, 30, 7); }
             }
+          } else if (T.kind === "guard" || T.kind === "turret") {
+            const dx = A.x - T.x, dz = A.z - T.z, d = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz);
+            const see = live && !jack && !BDOOR.gone && d < 34 && losClear(T.x, T.z, A.x, A.z);
+            if (T.kind === "guard") { T.g.rotation.y = yaw; cy = 1.3; cr = 0.8; } else { T.gun.rotation.y = yaw; cy = 4.05; cr = 1.0; }
+            if (see) {
+              T.fireT -= dt * (R.alarm > 0 ? 1.7 : 1);
+              if (T.fireT <= 0) {
+                if (T.kind === "guard") { T.fireT = rand(1.0, 1.7); enemyFire(btV.set(T.x + Math.sin(yaw) * 0.6, 1.35, T.z + Math.cos(yaw) * 0.6), 1, 0, 24, 9); }
+                else { T.fireT = rand(1.6, 2.2); enemyFire(btV.set(T.x + Math.sin(yaw) * 1.2, 4.0, T.z + Math.cos(yaw) * 1.2), 3, 0.07, 26, 7); }
+              }
+            }
           } else if (T.kind === "rec") {
             if (T.st === "wait") { if (A.z < T.trig && live && !jack) { T.st = "in"; T.age = 0; T.g.visible = true; T.g.position.set(T.x * 26, 42, A.z - 130); Sound.boom(true); showMsg("RECOGNIZER", "something from another grid is drifting in", COL.amber, 2.4); } else continue; }
             // drifts slowly to hover ahead of you, then fires spreads down at you
             T.age += dt;
-            const gx = Math.sin(t * 0.13 + T.ph) * 14, gz = Math.max(BT.bz + 25, A.z - 42), k = Math.min(1, dt * 0.22);
+            const gx = Math.sin(t * 0.13 + T.ph) * 14, gz = Math.max(BT.bz + 25, A.z - 42 * dirZ), k = Math.min(1, dt * 0.22);
             const P = T.g.position; P.x += (gx - P.x) * k; P.y += (12 + Math.sin(t * 0.5 + T.ph) * 1.5 - P.y) * k; P.z += (gz - P.z) * k;
             T.z = P.z; T.g.rotation.y = Math.atan2(A.x - P.x, A.z - P.z);
             cx = P.x; cy = P.y + 1.5; cr = 5;
-            if (live && !jack && T.age > 7) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(3.5, 4.8); enemyFire(btV.set(P.x, P.y - 1, P.z + 2), 3, 0.09, 20, 9); } }
+            if (live && !jack && !inBunker && T.age > 7) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(3.5, 4.8); enemyFire(btV.set(P.x, P.y - 1, P.z + 2), 3, 0.09, 20, 9); } }
           } else {
             const ph = t * 0.22 + T.ph; T.x = Math.sin(ph) * T.amp;
             T.g.position.set(T.x, Math.max(terrain(T.x - 1.8, T.z - 2.5), terrain(T.x + 1.8, T.z - 2.5), terrain(T.x - 1.8, T.z + 2.5), terrain(T.x + 1.8, T.z + 2.5)), T.z); T.g.rotation.y = lerp(T.g.rotation.y, Math.cos(ph) > 0 ? Math.PI / 2 : -Math.PI / 2, Math.min(1, dt * 1.5));
@@ -2289,12 +2467,31 @@
           }
         }
         const have = R.got.filter(Boolean).length;
+        if (R.stage === "open" && A.z < BT.bz - 3.2) this.enterBunker();
         if (R.stage === "advance" && have === 4 && A.z < BT.bz + 60) { R.stage = "open"; Sound.chime(); showMsg("CODE ACCEPTED", "the bunker door is open · get inside and jack in", COL.cyan, 2.6); doorEdge.material.color.set(0x35e6ff); }
         if (R.stage === "advance" && have < 4 && A.z < BT.bz + 14 && !R.hunt) { // at the door without the code: the beams show through the fog so you can go back for them
           R.hunt = true; keyBeamMat.fog = false; keyBeamMat.needsUpdate = true; Sound.buzz();
           showMsg("DOOR LOCKED", `missing ${4 - have} code digit${4 - have === 1 ? "" : "s"} · follow the violet beams`, "#d04dff", 3.5);
         }
         if (R.stage !== "advance") bunkerDoor.position.y = Math.min(4.6, bunkerDoor.position.y + dt * 1.5);
+        // the uplink: the dish turns, the masts blink, a beam runs up to the space laser, which strikes now and then
+        dish.userData.head.parent.rotation.y += dt * 0.15; mastLights.forEach((m, i) => (m.material.opacity = Math.sin(t * 3 + i) > 0.3 ? 1 : 0.15));
+        if (uplinkBeam.visible) { const pa = uplinkBeam.geometry.attributes.position; dish.userData.head.getWorldPosition(btV); pa.setXYZ(0, btV.x, btV.y + 2, btV.z); pa.setXYZ(1, spaceLaser.position.x, spaceLaser.position.y, spaceLaser.position.z); pa.needsUpdate = true; uplinkBeam.material.opacity = 0.3 + 0.3 * Math.sin(t * 7); }
+        spaceLaser.rotation.y += dt * 0.02;
+        R.laserT -= dt;
+        if (spaceLaser.visible && R.laserT <= 0 && (R.stage === "advance" || R.stage === "open")) { // a strike somewhere off to the side: what this is all about
+          R.laserT = rand(16, 28); spaceLaser.userData.tip.getWorldPosition(btV);
+          const hit = new V3((Math.random() < 0.5 ? -1 : 1) * rand(45, 110), 0, A.z - dirZ * rand(40, 160)); hit.y = terrain(hit.x, hit.z);
+          const len = btV.distanceTo(hit); laserBeam.position.copy(btV).add(hit).multiplyScalar(0.5); laserBeam.scale.set(1, len, 1);
+          laserBeam.quaternion.setFromUnitVectors(new V3(0, 1, 0), hit.clone().sub(btV).normalize()); laserBeam.visible = true; laserBeam.userData.t = 0.7;
+          blast(hit, 22, 1.6, 0xff5a3a); Sound.boom(true); pulse(0.3, 120);
+        }
+        if (laserBeam.visible) { laserBeam.userData.t -= dt; laserBeam.material.opacity = clamp(laserBeam.userData.t / 0.7, 0, 1); if (laserBeam.userData.t <= 0) laserBeam.visible = false; }
+        for (const b of blasts) { if (!b.on) continue; b.t += dt; const k2 = b.t / b.dur; b.m.scale.setScalar(1 + b.max * smooth01(k2)); b.m.material.opacity = Math.max(0, 1 - k2); if (k2 >= 1) { b.on = false; b.m.visible = false; } }
+        for (const d of debris) { if (d.t <= 0) continue; d.t -= dt; d.v.y -= 25 * dt; d.m.position.addScaledVector(d.v, dt); d.m.rotation.x += d.w.x * dt; d.m.rotation.y += d.w.y * dt; if (d.t <= 0) d.m.visible = false; }
+        if (pillar.visible) { pillar.userData.t += dt; const k2 = pillar.userData.t / 5; pillar.scale.set(1 + k2, 1 + k2 * 1.5, 1 + k2); pillar.material.opacity = Math.max(0, 1 - k2); if (k2 >= 1) pillar.visible = false; }
+        R.flash = Math.max(0, R.flash - dt * 0.6); if (R.fogBase0) R.fogBase.copy(R.fogBase0).lerp(C_ORANGE, R.flash * 0.5);
+        if (R.stage === "escape" || R.stage === "out" || R.stage === "home") this.escapeStep(dt, t, live);
         // mines: the HUD rings any within 9 m; step on one (feet on the ground) and it takes a whole jack
         mineLed.opacity = Math.sin(t * 5) > 0.5 ? 1 : 0.25; mineRingMat.opacity = 0.45 + 0.4 * Math.sin(t * 9);
         for (const M of mines) {
@@ -2338,17 +2535,17 @@
           }
         }
         // the odd Space Paranoid drifting across overhead, dropping a bomb now and then
-        if (live && !jack && R.stage === "advance" && A.z < -20) R.shipT -= dt;
+        if (live && !jack && (R.stage === "advance" || R.stage === "home") && A.z < -20) R.shipT -= dt;
         if (R.shipT <= 0) {
           R.shipT = rand(11, 20);
-          for (const S2 of btShips.filter((q) => !q.on).slice(0, Math.random() < 0.3 ? 2 : 1)) { const dir = Math.random() < 0.5 ? -1 : 1; Object.assign(S2, { on: true, x: -dir * 70, y: rand(20, 26), z: A.z - rand(15, 40), vx: dir * 8, hp: 3, dropT: rand(0.5, 1.5), flash: 0 }); S2.g.visible = true; S2.g.rotation.set(0, dir * Math.PI / 2, 0); Sound.whoosh(); }
+          for (const S2 of btShips.filter((q) => !q.on).slice(0, Math.random() < 0.3 ? 2 : 1)) { const dir = Math.random() < 0.5 ? -1 : 1; Object.assign(S2, { on: true, x: -dir * 70, y: rand(20, 26), z: A.z - dirZ * rand(15, 40), vx: dir * 8, hp: 3, dropT: rand(0.5, 1.5), flash: 0 }); S2.g.visible = true; S2.g.rotation.set(0, dir * Math.PI / 2, 0); Sound.whoosh(); }
         }
         for (const S2 of btShips) {
           if (!S2.on) continue;
           S2.x += S2.vx * dt; S2.flash = Math.max(0, S2.flash - dt * 4);
           S2.g.position.set(S2.x, S2.y + Math.sin(t * 1.3) * 0.4, S2.z); S2.g.rotation.z = Math.sin(t * 0.9) * 0.15; S2.g.scale.setScalar(1.4 + S2.flash * 0.3);
           if (Math.abs(S2.x) > 75) { S2.on = false; S2.g.visible = false; continue; }
-          if (live && !jack && Math.abs(S2.x - A.x) < 22) {
+          if (live && !jack && !inBunker && Math.abs(S2.x - A.x) < 22) {
             S2.dropT -= dt;
             const bb = S2.dropT <= 0 && bombs.find((q) => !q.on), ring = bb && mortars.find((m) => !m.on);
             if (bb && ring) {
@@ -2373,27 +2570,31 @@
         R.boomT -= dt; if (R.boomT <= 0) { R.boomT = rand(0.8, 2.5); burst((Math.random() < 0.5 ? -1 : 1) * rand(16, 40), rand(0.5, 4), A.z - rand(15, 70), Math.random() < 0.5 ? C_ORANGE : C_RED, 30); }
         // into the bunker: jack in, and the soldier tips forward into flight
         jackPort.rotation.z += dt * 0.8; termScreen.material.color.setHSL(0.52, 1, 0.45 + 0.15 * Math.sin(t * 6));
-        if (R.stage === "open" && live && A.z < B0 - 6) { R.stage = "jack"; R.jackT = 0; Sound.connected(); Sound.whoosh(); showMsg("JACKING IN", "leaving the sim for the net", COL.cyan, 3); }
+        if (R.stage === "inside" && live && Math.hypot(A.x - JACK.x, A.z - (JACK.z + 2.5)) < 2) { R.stage = "jack"; R.jackT = 0; Sound.connected(); Sound.whoosh(); Sound.alarm(false); showMsg("JACKING IN", "into the enemy mainframe", COL.cyan, 3); }
         if (jack) {
           R.jackT += dt; const k = smooth01(R.jackT / 1.6);
-          A.x = lerp(A.x, 0, dt * 2.5); A.y = lerp(A.y, 2.4, dt * 2.5); A.z = lerp(A.z, B0 - BT.bd + 0.3, dt * 1.6 * k);
+          A.x = lerp(A.x, JACK.x, dt * 2.5); A.y = lerp(A.y, JACK.y, dt * 2.5); A.z = lerp(A.z, JACK.z + 0.1, dt * 1.6 * k);
           construct.body.rotation.x = lerp(0, -Math.PI / 2, k); construct.gun.visible = k < 0.5;
           R.fogBase.lerp(C_SIG, dt * 0.6);
-          if (R.jackT > 2.6 && !R.over) { burst(0, 2.4, B0 - BT.bd + 0.5, C_SIG, 90); levelComplete("JACKED IN", `sim cleared in ${fmtTime(R.time)} · ${R.kills} threats down`); R.overT = R.overMax = 2.4; }
+          if (R.jackT > 2.6 && !R.over) { burst(JACK.x, JACK.y, JACK.z + 0.3, C_SIG, 90); levelComplete("JACKED IN", `you're in the enemy mainframe · ${R.kills} threats down`); R.overT = R.overMax = 2.4; }
         }
         // view
         const first = isFirst(), k = clamp(R.walk / 6, 0, 1), bob = Math.abs(Math.sin(R.stepPh)) * 0.05 * k;
+        rig.rotation.y = R.face; const cf = Math.cos(R.face), sf = Math.sin(R.face);
         if (first) {
           if (!R.eyeCal) R.eyeCal = xr ? camera.position.clone() : new V3(0, 1.6, 0);
-          rig.position.set(A.x - R.eyeCal.x, A.y + 0.5 + bob - R.eyeCal.y, A.z - 0.1 - R.eyeCal.z);
+          const ex = R.eyeCal.x * cf + R.eyeCal.z * sf, ez = -R.eyeCal.x * sf + R.eyeCal.z * cf;
+          rig.position.set(A.x - ex + fx * 0.1, A.y + 0.5 + bob - R.eyeCal.y, A.z - ez + fz * 0.1);
         } else {
-          const f = Math.min(1, dt * 4);
-          rig.position.x += (A.x * 0.85 - rig.position.x) * f; rig.position.y += (A.y - 0.2 - rig.position.y) * f;
-          rig.position.z += (A.z + (A.z < B0 + 0.6 ? 2.4 : 4.4) - rig.position.z) * f;
+          const f = Math.min(1, dt * 4), ffx = -sf, ffz = -cf; let back = 4.4;
+          if (!BDOOR.gone && bcell(A.x, A.z)) { back = 0.5; for (const d of [2.4, 1.8, 1.2]) if (!bsolidR(A.x - ffx * d, A.z - ffz * d, 0.2)) { back = d; break; } } // indoors, never put the camera inside a wall
+          rig.position.x += (A.x - ffx * back - rig.position.x) * f; rig.position.y += (A.y - 0.2 - rig.position.y) * f;
+          rig.position.z += (A.z - ffz * back - rig.position.z) * f;
         }
         if (!xr) camera.rotation.x = first ? 0 : -0.14;
-        R.yaw = lerp(R.yaw, jack ? 0 : clamp(Math.atan2(-A.vx, Math.max(1.5, -R.vz)), -1.2, 1.2), Math.min(1, dt * 6));
-        construct.root.position.set(A.x, A.y - 0.28 + bob, A.z); construct.root.rotation.set(-0.1 * k, R.yaw, 0);
+        const vf = A.vx * -sf + R.vz * -cf, vr = A.vx * cf - R.vz * sf; // velocity along your facing, and to its right
+        R.yaw = lerp(R.yaw, jack ? 0 : clamp(Math.atan2(-vr, Math.max(1.5, vf)), -1.2, 1.2), Math.min(1, dt * 6));
+        construct.root.position.set(A.x, A.y - 0.28 + bob, A.z); construct.root.rotation.set(-0.1 * k, R.face + R.yaw, 0);
         if (posing() && R.burnT <= 0) { if (jack) construct.pose(t, 1); else construct.stride(R.stepPh, k); }
         finishConstruct(t, false);
         keyLight.position.set(A.x + 1, A.y + 2.4, A.z + 2);
@@ -2402,8 +2603,10 @@
         // HUD: brackets on every threat in range, waypoint over the bunker
         const e = camera.matrixWorld.elements; let nb = 0; // brackets face the camera: corners along its right and up vectors
         threats.forEach((T, i) => {
-          if (!(T.on && T.st !== "wait" && live && !R.over && !jack && Math.abs(A.z - T.z) < 120 && T.z < A.z + 6)) return;
-          const cy = T.g.position.y + (T.kind === "soldier" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
+          if (!(T.on && T.st !== "wait" && live && !R.over && !jack && Math.abs(A.z - T.z) < 120 && (A.z - T.z) * dirZ > -6)) return;
+          const indoor = T.kind === "guard" || T.kind === "turret";
+          if (indoor ? !losClear(T.x, T.z, A.x, A.z) : inBunker) return; // the HUD can't see through bunker walls or its roof
+          const cy = T.g.position.y + (T.kind === "soldier" || T.kind === "guard" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : T.kind === "turret" ? 4.05 : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
           const cx = T.g.position.x, cz = T.z, k = Math.max(sz, Math.hypot(cx - camW.x, cy - camW.y, cz - camW.z) * 0.045);
           brC.set(T.flash > 0 ? 0xffffff : T.guard ? 0xffc24a : 0xff3a5c).multiplyScalar(T.kind === "soldier" && T.up < 0.5 ? 0.3 : 0.65 + 0.35 * Math.sin(t * 8 + i));
           for (let v = 0; v < 16; v++) {
@@ -2414,15 +2617,22 @@
           nb++;
         });
         brGeo.setDrawRange(0, nb * 16); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
-        const wd = Math.max(0, A.z - B0);
-        waypoint.m.visible = live && !R.over && !jack && A.z > B0 + 1;
-        waypoint.m.position.set(0, 7.5, B0); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
-        if (waypoint.m.visible) waypoint.draw(`BUNKER ${Math.round(wd / 5) * 5} m`, R.stage === "advance" ? `locked · code ${R.got.filter(Boolean).length} / 4` : "door open", R.stage === "advance" ? COL.amber : COL.cyan);
+        if (R.stage === "home" || R.stage === "out") { // going home: the waypoint marks our lines
+          const wd = Math.max(0, R.homeZ - A.z);
+          waypoint.m.visible = live && !R.over; waypoint.m.position.set(0, groundAt(0, R.homeZ) + 7.5, R.homeZ); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
+          if (waypoint.m.visible) waypoint.draw(`HOME ${Math.round(wd / 5) * 5} m`, R.stage === "out" ? `self-destruct ${Math.ceil(R.selfT)} s` : "our lines", COL.heal);
+        } else {
+          const wd = Math.max(0, A.z - B0);
+          waypoint.m.visible = live && !R.over && !jack && A.z > B0 + 1 && R.stage !== "escape";
+          waypoint.m.position.set(0, 7.5, B0); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
+          if (waypoint.m.visible) waypoint.draw(`UPLINK BUNKER ${Math.round(wd / 5) * 5} m`, R.stage === "advance" ? `locked · code ${R.got.filter(Boolean).length} / 4` : "door open", R.stage === "advance" ? COL.amber : COL.cyan);
+        }
       },
     },
     { // ---------------------------------------------------------------- 02
-      id: "run", num: "02", name: "Data Run", col: COL.amber, music: "run", target: 120,
-      blurb: "Fill a 120 GB buffer on the data highway, then fly out through the exit port. Firewalls burn.",
+      id: "run", num: "03", name: "Data Run", col: COL.amber, music: "run", target: 120,
+      blurb: "Fill a 120 GB buffer with access data, then fly out through the exit port. Firewalls burn.",
+      brief: "You're in the enemy net. Fill your buffer with 120 GB of access data to map a way to the mainframe, then take the exit port. Firewalls burn.",
       init() { setEnv("highway"); R.nPk = -50; R.nIce = -110; R.nWall = -280; R.stage = "collect"; },
       objective() {
         if (R.stage === "collect") return { label: "Objective", text: `Collect data · ${Math.floor(R.data)} / ${this.target} GB`, prog: R.data / this.target };
@@ -2442,14 +2652,15 @@
         if (R.stage === "exit") {
           const k = clamp(1 - (A.z - R.zE) / 180, 0, 1); if (alive()) { A.x = lerp(A.x, 0, dt * k * 2.5); A.y = lerp(A.y, 6, dt * k * 2.5); }
           exitPort.rotation.z += dt * 0.6;
-          if (alive() && prev.z > R.zE && A.z <= R.zE) { burst(A.x, A.y, A.z, C_SIG, 80); Sound.whoosh(); levelComplete("DATA RUN CLEARED", `${Math.floor(R.data)} GB out in ${fmtTime(R.time)}`); exitPort.visible = false; }
+          if (alive() && prev.z > R.zE && A.z <= R.zE) { burst(A.x, A.y, A.z, C_SIG, 80); Sound.whoosh(); levelComplete("NET BREACHED", `${Math.floor(R.data)} GB of access data · the mainframe is mapped`); exitPort.visible = false; }
         }
         updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 4 }); updateWalls(dt, t);
       },
     },
     { // ---------------------------------------------------------------- 03
-      id: "gauntlet", num: "03", name: "The Gauntlet", col: COL.violet, music: "gauntlet", keys: 10, roll: true, ownIntro: true,
-      blurb: "Spikes burst from floor and ceiling. Roll your body to fit 10 keyholes. Miss one and you shatter.",
+      id: "gauntlet", num: "04", name: "The Gauntlet", col: COL.violet, music: "gauntlet", keys: 10, roll: true, ownIntro: true,
+      blurb: "The mainframe's spike corridor. Roll your body to fit 10 keyholes. Miss one and you shatter.",
+      brief: "The mainframe's outer defences: spikes burst from floor and ceiling, and ten keyhole walls block the way. Roll your body to fit each keyhole. Miss one and you shatter.",
       init() {
         setEnv("gauntlet");
         R.lx = 0; R.ly = 4; R.ltx = 0; R.lty = 5; R.nRow = -50; R.rowsLeft = 14; R.kSpawned = 0; R.keysPassed = 0; R.keys = 0;
@@ -2576,14 +2787,15 @@
         if (R.stage === "exit") {
           const k = clamp(1 - (A.z - R.zE) / 160, 0, 1); if (live) { A.x = lerp(A.x, 0, dt * k * 2.5); A.y = lerp(A.y, 6, dt * k * 2.5); }
           exitPort.rotation.z += dt * 0.6;
-          if (live && prev.z > R.zE && A.z <= R.zE) { burst(A.x, A.y, A.z, C_SIG, 80); Sound.whoosh(); levelComplete("GAUNTLET RUN", `${R.keys} / ${this.keys} keyholes clean · ${fmtTime(R.time)}`); exitPort.visible = false; }
+          if (live && prev.z > R.zE && A.z <= R.zE) { burst(A.x, A.y, A.z, C_SIG, 80); Sound.whoosh(); levelComplete("DEFENCES PASSED", `${R.keys} / ${this.keys} keyholes clean · ${fmtTime(R.time)}`); exitPort.visible = false; }
         }
         updatePackets(dt, t, R.godT > 0);
       },
     },
     { // ---------------------------------------------------------------- 04
-      id: "paranoids", num: "04", name: "Space Paranoids", col: COL.orange, music: "paranoids", need: 20,
-      blurb: "Shoot down 20 Paranoid ships, then a Recognizer, then the security program as it builds itself.",
+      id: "paranoids", num: "05", name: "Space Paranoids", col: COL.orange, music: "paranoids", need: 20,
+      blurb: "Its security programs. Shoot down 20 Paranoids, a Recognizer, and the program that builds itself.",
+      brief: "The mainframe's security programs have seen you. Shoot down twenty Paranoid ships, then a Recognizer, then the security program as it builds itself.",
       init() { setEnv("paranoid"); R.nPk = -60; R.nIce = -160; R.stage = "ships"; R.shipKills = 0; R.recKills = 0; R.waveT = 2; },
       objective() {
         if (R.stage === "ships") return { label: "Objective", text: `Shoot down Paranoids · ${R.shipKills} / ${this.need}`, prog: R.shipKills / this.need };
@@ -2602,25 +2814,26 @@
           if (R.waveT <= 0 && ships.filter((s) => s.on).length < 3) { spawnWave(R.shipKills > 10 ? 1 : 0); R.waveT = 3; if (R.shipKills === 0) showMsg("PARANOIDS INBOUND", "point and shoot", COL.orange, 1.6); }
           if (R.shipKills >= this.need) { R.stage = "rec"; spawnRec(30); spawnWave(0); }
         } else if (R.stage === "rec") { if (R.recKills >= 1 && !ships.some((s) => s.on && s.st !== "out")) { R.stage = "boss"; spawnBoss(12); } }
-        else if (R.stage === "boss" && !B.on && B.st === "dead") { R.stage = "done"; levelComplete("PARANOIDS CLEARED", `${R.kills} kills in ${fmtTime(R.time)}`); }
+        else if (R.stage === "boss" && !B.on && B.st === "dead") { R.stage = "done"; levelComplete("SECURITY DOWN", `${R.kills} kills in ${fmtTime(R.time)} · the core is exposed`); }
         updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 5 });
         updateShips(dt, t); updateRecs(dt, t); updateBoss(dt, t);
       },
     },
     { // ---------------------------------------------------------------- 05
-      id: "uplink", num: "05", name: "Beijing Uplink", col: COL.cyan, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
-      blurb: "Johnny's call. Twist the data cube with your hands (or controllers) to open the line to Beijing before the trace lands.",
+      id: "uplink", num: "06", name: "Open the Line", col: COL.cyan, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
+      blurb: "Twist the data cube with your hands (or controllers) to open a modem line out of the net.",
+      brief: "The core runs on military crypto you can't break alone. Crack the data cube with your hands to open a long-distance modem line out of the enemy net, before the trace lands.",
       init() {
         setEnv("uplink"); uplink.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
         Object.assign(R, { stage: "solve", round: 0, trace: 100, idle: 0, hintT: 0, anim: null, grabs: new Map(), placed: false, nextT: 0, sol: [] });
         cubeRoot.position.set(0, 1.33, -0.62); cubeRoot.quaternion.setFromEuler(new THREE.Euler(0.45, -0.6, 0));
         this.scramble(3);
         const xr = renderer.xr.isPresenting;
-        showMsg("BEIJING UPLINK", xr ? "pinch a face and drag to turn it · pinch beside the cube to spin it" : "drag a face to turn it · drag beside the cube to spin it", COL.cyan, 5);
+        showMsg("OPEN THE LINE", xr ? "pinch a face and drag to turn it · pinch beside the cube to spin it" : "drag a face to turn it · drag beside the cube to spin it", COL.cyan, 5);
       },
       objective() {
         if (R.stage === "solve") return { label: `Trace ${Math.ceil(R.trace)}% · lock ${R.round + 1} / 2`, text: R.sol.length ? `Solve the data cube · ${renderer.xr.isPresenting ? "B" : "G"} for a hint` : "Solve the data cube", prog: R.round / 2 };
-        return { label: "Line open", text: "Ringing Beijing…", prog: 1 };
+        return { label: "Line open", text: "Dialling out…", prog: 1 };
       },
       onRespawn() { R.trace = 100; R.anim = null; R.grabs.clear(); this.scramble(R.round ? 6 : 3); },
       scramble(n) {
@@ -2641,7 +2854,7 @@
         if (!cubeSolved()) return;
         R.sol = []; R.round++; Sound.chime(); burst(cubeRoot.position.x, cubeRoot.position.y, cubeRoot.position.z, C_SIG, 50); R.data += 15;
         if (R.round < 2) { showMsg("LOCK ONE OPEN", "one more lock on the line", COL.cyan, 2); R.nextT = 1.8; R.stage = "next"; }
-        else { R.stage = "ring"; R.nextT = 3.4; Sound.ringback(); showMsg("RINGING BEIJING", "the line is open", COL.heal, 3.2); }
+        else { R.stage = "ring"; R.nextT = 3.4; Sound.ringback(); showMsg("LINE OPEN", "dialling out of the net", COL.heal, 3.2); }
       },
       // pointers: pinching hands (contact), or a ray from a controller trigger / the mouse
       pointers() {
@@ -2675,10 +2888,10 @@
         const xr = renderer.xr.isPresenting, live = alive();
         if (xr && !R.placed) { R.placed = true; const h = camera.position; cubeRoot.position.set(h.x, h.y - 0.3, h.z - 0.42).applyMatrix4(rig.matrixWorld); }
         if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.42, 0, 0); }
-        upGlobe.rotation.y += dt * 0.08; upBeijing.scale.setScalar(1 + 0.3 * Math.sin(t * 6));
+        upGlobe.rotation.y += dt * 0.08; upNode.scale.setScalar(1 + 0.3 * Math.sin(t * 6));
         upRings.forEach((m, i) => { m.position.copy(cubeRoot.position); m.rotation.set(t * (0.3 + i * 0.2), t * (0.5 - i * 0.3), 0); });
         if (R.stage === "solve" && live) { R.trace -= dt * (R.round ? 0.75 : 0.6); if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
-        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.scramble(6); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `Beijing in ${fmtTime(R.time)} · now dial`); } } }
+        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.scramble(6); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `cracked in ${fmtTime(R.time)} · now make the call`); } } }
         // turning animation
         if (R.anim) {
           R.anim.t += dt / 0.22; const m = R.anim.m, k = smooth01(R.anim.t);
@@ -2738,20 +2951,21 @@
       },
     },
     { // ---------------------------------------------------------------- 06
-      id: "beijing", num: "06", name: "Call Beijing", col: COL.heal, music: "beijing", number: "861065123847",
-      blurb: "Ride the trunk line. Fly through the right digit at each gate to dial +86 10 6512 3847 before a trace finds you.",
+      id: "beijing", num: "07", name: "Long Distance", col: COL.heal, music: "beijing", number: "080019950526",
+      blurb: "Fly the trunk line and dial your hacker contact, digit by digit, before the trace finds you.",
+      brief: "Long distance. Fly the trunk line through cyberspace and dial your hacker contact, one digit gate at a time, before the trace finds you. They have the self-destruct backdoor.",
       init() {
         setEnv("tunnel"); R.zT0 = A.z - 10; tunnelMat.uniforms.uT0.value = R.zT0; R.rx = A.x; R.ry = A.y - 6;
         R.digit = 0; R.signal = 100; R.nGate = A.z - 230; R.nPk = A.z - 80; R.nIce = A.z - 150; R.nBar = A.z - 320; R.stage = "dial";
-        showMsg("CALL BEIJING", "dial +86 10 6512 3847", COL.heal, 3);
+        showMsg("LONG DISTANCE", "dial 0800 1995 0526", COL.heal, 3);
       },
       objective() {
-        const n = this.number, shown = `+${n.slice(0, 2)} ${n.slice(2, 4)} ${n.slice(4, 8)} ${n.slice(8)}`;
+        const n = this.number, shown = `${n.slice(0, 4)} ${n.slice(4, 8)} ${n.slice(8)}`;
         if (R.stage === "dial") {
           const next = n[R.digit];
           return { label: `Signal ${Math.ceil(R.signal)}% · dialled ${R.digit}/${n.length}`, text: `Next digit: ${next}   (${shown})`, prog: R.digit / n.length };
         }
-        return { label: "Ringing", text: "Reach the Beijing exchange", prog: 1 - clamp((A.z - R.zEnd) / 360, 0, 1) };
+        return { label: "Ringing", text: "Reach the hacker's node", prog: 1 - clamp((A.z - R.zEnd) / 360, 0, 1) };
       },
       onRespawn() { R.signal = 100; for (const p of ice) if (p.on && p.z < A.z && p.z > A.z - 90) p.on = false; },
       update(dt, t) {
@@ -2792,7 +3006,7 @@
               burst(A.x, A.y, A.z, C_HEAL, 30, R.speed * 0.6);
               if (R.digit >= n.length) {
                 R.stage = "ring"; R.zEnd = A.z - 360; const e = path(R.zT0 - R.zEnd); beijingPort.position.set(e.x, e.y, R.zEnd); beijingPort.visible = true;
-                Sound.ringback(); showMsg("RINGING…", "the Beijing exchange is ahead", COL.heal, 3);
+                Sound.ringback(); showMsg("RINGING…", "the hacker's node is ahead", COL.heal, 3);
               } else showMsg(`DIALLED ${hitR.digit}`, `next: ${n[R.digit]}`, COL.heal, 1);
             } else { Sound.dtmf(hitR.digit); Sound.buzz(); showMsg("WRONG NUMBER", `you dialled ${hitR.digit}; you need ${n[R.digit]}`, COL.alarm, 1.4); damage(15, "WRONG NUMBER", A.x, A.y, A.z); }
           }
@@ -2810,7 +3024,7 @@
         if (R.stage === "ring") {
           beijingPort.rotation.z += dt * 0.5;
           const k = clamp(1 - (A.z - R.zEnd) / 150, 0, 1); if (alive()) { R.rx = lerp(R.rx, 0, dt * k * 3); R.ry = lerp(R.ry, 0, dt * k * 3); }
-          if (alive() && prev.z > R.zEnd && A.z <= R.zEnd) { beijingPort.visible = false; Sound.connected(); burst(A.x, A.y, A.z, C_RED, 90); levelComplete("CONNECTED", "“喂？” Beijing picks up"); }
+          if (alive() && prev.z > R.zEnd && A.z <= R.zEnd) { beijingPort.visible = false; Sound.connected(); burst(A.x, A.y, A.z, C_RED, 90); levelComplete("CONNECTED", "the hacker picks up · the backdoor is yours"); }
         }
         updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 5.5 });
       },
@@ -2829,8 +3043,9 @@
       spawnBar(z) { const b = bars.find((b) => !b.on); if (!b) return; Object.assign(b, { on: true, z, a: rand(0, Math.PI), w: (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 1.1), passed: false }); b.m.visible = true; },
     },
     { // ---------------------------------------------------------------- 07
-      id: "trap", num: "07", name: "Firewall Trap", col: COL.alarm, music: "trap", noGod: true, static: true, tapAim: true, aimDist: 9,
-      blurb: "You're caged in a shrinking firewall. Lock the rotating rings when their gaps line up, then repeat the echo code.",
+      id: "trap", num: "08", name: "Firewall Trap", col: COL.alarm, music: "trap", noGod: true, static: true, tapAim: true, aimDist: 9,
+      blurb: "The mainframe heard the call. Lock the rings, repeat the echo code, break out of the cage.",
+      brief: "The mainframe heard your call and caged you in a shrinking firewall. Lock the rotating rings when their gaps line up, then repeat the echo code to break out.",
       init() {
         setEnv("cage"); trapGroup.visible = true;
         rig.position.set(0, 0, 0); A.x = -1.3; A.y = 0.75; A.z = -3; R.echoT = 0;
@@ -2892,7 +3107,7 @@
         const live = alive();
         if (live && R.stage !== "open") R.cageR -= dt * 0.07;
         if (R.echoT > 0) { R.echoT -= dt; if (R.echoT <= 0 && R.stage === "rings") this.startEcho(); }
-        if (R.stage === "open") { R.openT += dt; R.cageR += dt * 30; A.z -= dt * R.openT * 20; if (R.openT > 2.5) levelComplete("ESCAPED THE TRAP", `cracked in ${fmtTime(R.time)}`); }
+        if (R.stage === "open") { R.openT += dt; R.cageR += dt * 30; A.z -= dt * R.openT * 20; if (R.openT > 2.5) levelComplete("OUT OF THE CAGE", `cracked in ${fmtTime(R.time)} · on to the core`); }
         cage.scale.setScalar(Math.max(3.6, R.cageR)); cage.position.set(0, 1.6, 0);
         cageMat.uniforms.uHeat.value = clamp(1 - (R.cageR - 3.6) / 12, 0, 1);
         if (live && R.cageR <= 3.6) { killNow("burn"); }
@@ -2927,8 +3142,9 @@
       },
     },
     { // ---------------------------------------------------------------- 08
-      id: "polybius", num: "08", name: "Polybius", col: COL.violet, music: "polybius", lane: true, godName: "SUPERZAPPER",
-      blurb: "The cabinet nobody remembers. Hold the rim, shoot down the tube, survive four waves and the core.",
+      id: "polybius", num: "09", name: "Polybius Core", col: COL.violet, music: "polybius", lane: true, godName: "SUPERZAPPER",
+      blurb: "The mainframe core. Hold the rim, survive four waves, destroy the core and the lasers blow.",
+      brief: "The mainframe core, running on a cabinet nobody remembers. Hold the rim and shoot down the tube. Survive four waves, destroy the core, and the hacker's backdoor makes the space lasers tear themselves apart.",
       init() {
         setEnv("poly"); R.wave = 0; R.u = 0.5; R.spawnLeft = 0; R.spawnT = 0; R.core = 0; R.coreHp = 90; R.laneCD = 0;
         this.startWave(0);
@@ -3028,7 +3244,7 @@
             const d0 = b.d; b.d += 1.7 * dt;
             for (const e of pve) if (e.on && Math.abs(polyWrap(b.u - e.u)) < 0.5 && e.d >= d0 - 0.03 && e.d <= b.d + 0.02) { b.on = false; e.hp--; if (e.hp <= 0) this.killE(e); break; }
             if (b.on) for (const q of pbe) if (q.on && Math.abs(polyWrap(b.u - q.u)) < 0.5 && q.d >= d0 - 0.03 && q.d <= b.d + 0.03) { q.on = false; b.on = false; break; }
-            if (b.on && b.d >= 0.97) { b.on = false; if (R.stage === "core") { R.coreHp--; burst(POLY_C.x, POLY_C.y, -POLY_L + 2, C_VIOLET, 10); if (R.coreHp <= 0 && !R.over) { pvCore.visible = false; for (let k2 = 0; k2 < 6; k2++) burst(POLY_C.x + rand(-4, 4), POLY_C.y + rand(-4, 4), -POLY_L + 3, k2 % 2 ? C_VIOLET : C_DATA, 50); Sound.boom(true); levelComplete("END OF LINE", "you beat the Polybius cabinet"); } } }
+            if (b.on && b.d >= 0.97) { b.on = false; if (R.stage === "core") { R.coreHp--; burst(POLY_C.x, POLY_C.y, -POLY_L + 2, C_VIOLET, 10); if (R.coreHp <= 0 && !R.over) { pvCore.visible = false; for (let k2 = 0; k2 < 6; k2++) burst(POLY_C.x + rand(-4, 4), POLY_C.y + rand(-4, 4), -POLY_L + 3, k2 % 2 ? C_VIOLET : C_DATA, 50); Sound.boom(true); levelComplete("CORE DESTROYED", "self-destruct sent to the space lasers · jack out"); } } }
           }
           if (b.on) { polyPos(b.u, PATH); writeSet(pbSet, i, true, PATH.x, PATH.y, -b.d * POLY_L, 0, 0, t * 8, 1); } else writeSet(pbSet, i, false);
         }
@@ -3043,6 +3259,36 @@
       },
     },
   ];
+  // chapters 2 (the bunker) and 10 (the escape) reuse the battlefield's world and rules
+  const BATTLE = LEVELS[0];
+  const BUNKER = Object.assign(Object.create(BATTLE), {
+    id: "bunker", num: "02", name: "The Bunker", col: COL.cyan, music: "bunker", ownIntro: true,
+    blurb: "Inside the uplink bunker. Fight to the mainframe room and jack in. Jump the tripwires.",
+    brief: "You're inside the satellite uplink bunker. Guards and ceiling turrets hold the corridors, and red tripwires raise the alarm, so jump them. Fight through to the mainframe room at the back and jack yourself in.",
+    init() {
+      BATTLE.init.call(this); hideMsg();
+      Object.assign(R, { stage: "inside", got: [true, true, true, true] }); keypad.draw(R.code, R.got); BDOOR.open = true; bunkerDoor.position.y = 4.6; doorEdge.material.color.set(0x35e6ff);
+      keyDigits.forEach((K) => { K.on = false; K.g.visible = false; });
+      for (const T of threats) if (T.kind === "rec") { T.on = false; T.g.visible = false; } // they stay outside
+      A.x = 0; A.z = BT.bz - 4.5; A.y = R.by = R.gy = 1.2; prev.set(A.x, A.y, A.z); R.cp = A.z; rig.position.set(A.x, A.y - 0.2, A.z + 2.4);
+    },
+  });
+  const ESCAPE = Object.assign(Object.create(BATTLE), {
+    id: "escape", num: "10", name: "Escape", col: COL.alarm, music: "escape", ownIntro: true,
+    blurb: "Jack out. The bunker's self-destruct is armed. Get out, then run home across the field.",
+    brief: "The core is gone and your self-destruct is running through the enemy's systems. You've jacked out into a bunker on its own countdown. Get out, watch the sky, then run home across the battlefield to our lines.",
+    init() {
+      BATTLE.init.call(this); hideMsg();
+      Object.assign(R, { stage: "escape", face: Math.PI, selfT: 45, homeZ: BT.trenches[Math.max(1, BT.trenches.length - 4)], got: [true, true, true, true] });
+      keypad.draw(R.code, R.got); BDOOR.open = true; bunkerDoor.position.y = 4.6; doorEdge.material.color.set(0x35e6ff);
+      keyDigits.forEach((K) => { K.on = false; K.g.visible = false; });
+      for (const T of threats) if (T.kind !== "soldier" && T.kind !== "turret") { T.on = false; T.g.visible = false; } // the guards are gone; their machines and the turrets aren't
+      A.x = JACK.x; A.z = JACK.z + 3.5; A.y = R.by = R.gy = 1.2; prev.set(A.x, A.y, A.z); R.cp = BT.bz + 6;
+      rig.rotation.y = Math.PI; rig.position.set(A.x, A.y - 0.2, A.z - 2.4);
+      Sound.alarm(true); showMsg("JACKED OUT", "the bunker's self-destruct is armed · get out", COL.alarm, 3);
+    },
+  });
+  LEVELS.splice(1, 0, BUNKER); LEVELS.push(ESCAPE);
   const SPLASH = { id: "splash", name: "Splash", music: "splash", objective: () => ({ label: "", text: "", prog: 0 }),
     init() { setEnv("highway"); R.nPk = -40; R.nIce = -120; },
     update(dt, t) {
@@ -3102,18 +3348,18 @@
   });
   const levelsPanel = makePanel(1.75, 1.7, 0, (p) => {
     const g = p.g, W = p.c.width;
-    frame(p, "levels");
+    frame(p, "mission");
     LEVELS.forEach((L, i) => {
-      const y = 100 + i * 111, h = 102, locked = i > rec.unlocked, r = lrec(L.id);
+      const y = 96 + i * 89, h = 82, locked = i > rec.unlocked, r = lrec(L.id);
       btn(p, 30, y, W - 60, h, locked ? () => { Sound.buzz(); } : () => startLevel(i), (g, hov) => {
-        g.fillStyle = locked ? COL.dim : L.col; g.font = `36px ${FONT}`; g.fillText(`${L.num}  ${L.name.toUpperCase()}`, 56, y + 40);
-        g.fillStyle = locked ? "rgba(143,151,200,0.7)" : COL.ink; g.font = `19px ${FONT}`;
-        const words = (locked ? `Locked · clear ${LEVELS[i - 1].name} to open it` : L.blurb).split(" "); let line = "", ly = y + 68;
-        for (const w of words) { if (g.measureText(line + w).width > W - 330) { g.fillText(line, 56, ly); line = ""; ly += 23; } line += w + " "; }
+        g.fillStyle = locked ? COL.dim : L.col; g.font = `30px ${FONT}`; g.fillText(`${L.num}  ${L.name.toUpperCase()}`, 56, y + 34);
+        g.fillStyle = locked ? "rgba(143,151,200,0.7)" : COL.ink; g.font = `17px ${FONT}`;
+        const words = (locked ? `Locked · clear ${LEVELS[i - 1].name} to open it` : L.blurb).split(" "); let line = "", ly = y + 60;
+        for (const w of words) { if (g.measureText(line + w).width > W - 330) { g.fillText(line, 56, ly); line = ""; ly += 19; } line += w + " "; }
         g.fillText(line, 56, ly);
         g.textAlign = "right"; g.font = `26px ${FONT}`; g.fillStyle = r.best !== null ? COL.heal : COL.dim;
-        g.fillText(r.best !== null ? `BEST ${fmtTime(r.best)}` : locked ? "LOCKED" : "NOT CLEARED", W - 56, y + 40);
-        if (!locked) { g.fillStyle = hov ? COL.amber : COL.dim; g.fillText(hov ? "JACK IN ▸" : `${r.tries} tries`, W - 56, y + 76); }
+        g.fillText(r.best !== null ? `BEST ${fmtTime(r.best)}` : locked ? "LOCKED" : "NOT CLEARED", W - 56, y + 34);
+        if (!locked) { g.fillStyle = hov ? COL.amber : COL.dim; g.fillText(hov ? "JACK IN ▸" : `${r.tries} tries`, W - 56, y + 64); }
         g.textAlign = "left";
       });
     });
@@ -3147,10 +3393,10 @@
     const g = p.g, W = p.c.width;
     frame(p, "records");
     LEVELS.forEach((L, i) => {
-      const r = lrec(L.id), y = 120 + i * 80;
-      g.fillStyle = i > rec.unlocked ? COL.dim : L.col; g.font = `32px ${FONT}`; g.fillText(`${L.num} ${L.name.toUpperCase()}`, 36, y);
-      g.fillStyle = COL.ink; g.font = `24px ${FONT}`;
-      g.fillText(`best ${r.best !== null ? fmtTime(r.best) : "—"}   haul ${r.data} GB   cleared ${r.clears}×   tries ${r.tries}`, 36, y + 38);
+      const r = lrec(L.id), y = 108 + i * 66;
+      g.fillStyle = i > rec.unlocked ? COL.dim : L.col; g.font = `26px ${FONT}`; g.fillText(`${L.num} ${L.name.toUpperCase()}`, 36, y);
+      g.fillStyle = COL.ink; g.font = `20px ${FONT}`;
+      g.fillText(`best ${r.best !== null ? fmtTime(r.best) : "—"}   haul ${r.data} GB   cleared ${r.clears}×   tries ${r.tries}`, 36, y + 28);
     });
     g.fillStyle = COL.dim; g.font = `24px ${FONT}`;
     g.fillText(`${rec.runs} level runs · ${rec.deaths} neural jacks burnt`, 36, 780);
@@ -3205,7 +3451,7 @@
     else { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
   }
   function setMode(m) {
-    S.mode = m;
+    S.mode = m; rig.rotation.set(0, 0, 0);
     (m === "hub" ? hubScene : runScene).add(rig);
     rig.position.set(0, 0, 0);
     resetCamera();
@@ -3230,7 +3476,8 @@
     L.init();
     rig.position.x = A.x * 0.75;
     Sound.track(L.music); Sound.silence(false);
-    if (!L.ownIntro && L.id !== "beijing" && L.id !== "trap") showMsg(`LEVEL ${L.num}`, L.name.toUpperCase(), L.col, 2.6);
+    if (L.brief) showBrief(`Chapter ${L.num} of ${LEVELS.length}`, L.name, L.brief, L.col);
+    else if (!L.ownIntro && L.id !== "beijing" && L.id !== "trap") showMsg(`LEVEL ${L.num}`, L.name.toUpperCase(), L.col, 2.6);
     resetCamera();
   }
   function startSplash() {
@@ -3240,7 +3487,7 @@
     $("hud").hidden = true;
   }
   function toHub() {
-    hideMsg(); resetWorld(); R = null; Sound.alarm(false);
+    hideMsg(); hideBrief(); resetWorld(); R = null; Sound.alarm(false);
     setMode("hub");
   }
 
@@ -3297,6 +3544,12 @@
       else gatherInput(dt);
       if (S.mode === "run") {
         if (IN.abort) { toHub(); renderer.render(hubScene, camera); return; }
+        if (R.briefT > 0) { // briefing card up: the world waits
+          R.briefT -= dt;
+          if (R.briefT <= 0 || ((IN.confirm || K.Space) && R.briefT < R.briefMax - 0.8)) hideBrief();
+          if (renderer.xr.isPresenting) { const c = camera.position; vrBrief.m.position.set(c.x, c.y, c.z - 2.2); }
+          renderer.render(runScene, camera); return;
+        }
         if (R.over) {
           R.overT -= dt;
           if (R.overT <= 0 || (IN.confirm && R.overT < R.overMax - 1.5)) {
@@ -3314,6 +3567,7 @@
       U.uWarp.value = R.L.lane || R.L.static ? 0 : GOD.value; U.uWarpC.value.set(A.x, 0, A.z);
       deathStep(dt, t);
       R.L.update(dt, t);
+      sky.position.set(rig.position.x, 0, rig.position.z); // the dome travels with you (levels run well past its radius)
       shootStep(dt);
       updateBolts(dt);
       updateFx(dt);
@@ -3346,7 +3600,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, powerUps, keyDigits, friendlies, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
