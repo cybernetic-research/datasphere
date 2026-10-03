@@ -800,12 +800,16 @@
   })();
   const btBoxMat = shader({ ...U }, `void main(){ vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); float l = abs(dot(n, normalize(vec3(0.25, 0.6, -0.75))));
     float e = boxEdge(vUv, 1.2); vec3 col = vCol * (0.3 + 0.8 * l) * (1.0 - e * 0.35); gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`);
-  { // sandbag parapets either side of every trench, two layers
-    const bags = []; for (const tz of BT.trenches) for (const sd of [-1, 1]) for (let l = 0; l < 2; l++) for (let x = -40 + l * 0.55; x < 40; x += 1.15) bags.push([x, 0.175 + l * 0.35, tz + sd * (BT.tw + 0.45)]);
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 0.35, 0.6), btBoxMat, bags.length);
-    const cA = new C3(0x8a7a40), cB = new C3(0x6e6230);
-    bags.forEach(([x, y, z], i) => { dummy.position.set(x, y, z); dummy.rotation.set(0, rand(-0.08, 0.08), 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, Math.random() < 0.5 ? cA : cB); });
-    dummy.rotation.set(0, 0, 0); im.frustumCulled = false; battle.add(im);
+  BT.bagRows = []; // sandbag parapets either side of every trench, two layers: one batch per trench, drawn only when near
+  {
+    const geo = new THREE.BoxGeometry(1.1, 0.35, 0.6), cA = new C3(0x8a7a40), cB = new C3(0x6e6230);
+    for (const tz of BT.trenches) {
+      const bags = []; for (const sd of [-1, 1]) for (let l = 0; l < 2; l++) for (let x = -40 + l * 0.55; x < 40; x += 1.15) bags.push([x, 0.175 + l * 0.35, tz + sd * (BT.tw + 0.45)]);
+      const im = new THREE.InstancedMesh(geo, btBoxMat, bags.length);
+      bags.forEach(([x, y, z], i) => { dummy.position.set(x, y, z); dummy.rotation.set(0, rand(-0.08, 0.08), 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, Math.random() < 0.5 ? cA : cB); });
+      im.frustumCulled = false; battle.add(im); BT.bagRows.push({ im, z: tz });
+    }
+    dummy.rotation.set(0, 0, 0);
   }
   // thorns (Lawnmower Man): long dark spikes with pale tips, in hedges where the wire lines run (with gaps) and in loose thickets
   const thornMat = shader({ ...U }, `void main(){ vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); float l = abs(dot(n, normalize(vec3(0.25, 0.6, -0.75))));
@@ -1047,9 +1051,9 @@
   // mines: half-buried discs with a blinking light and a proximity ring on your HUD; step on one and you lose a jack
   const MN = 220, mineLed = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true });
   const mineRingMat = new THREE.MeshBasicMaterial({ color: 0xffc24a, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const mineRingGeo = new THREE.RingGeometry(0.8, 0.92, 24); mineRingGeo.rotateX(-Math.PI / 2);
+  const mineRingGeo = new THREE.RingGeometry(0.8, 0.92, 16); mineRingGeo.rotateX(-Math.PI / 2);
   const mineDiscs = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.38, 0.46, 0.16, 8), new THREE.MeshBasicMaterial({ color: 0x2c5a3a }), MN);
-  const mineLeds = new THREE.InstancedMesh(new THREE.SphereGeometry(0.06, 6, 4), mineLed, MN), mineRings = new THREE.InstancedMesh(mineRingGeo, mineRingMat, MN);
+  const mineLeds = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.06, 0), mineLed, MN), mineRings = new THREE.InstancedMesh(mineRingGeo, mineRingMat, MN);
   [mineDiscs, mineLeds, mineRings].forEach((m) => { m.frustumCulled = false; battle.add(m); });
   const mines = [];
   for (let i = 0; i < MN; i++) {
@@ -2778,7 +2782,8 @@
           if (live && !jack && d < 0.85 && A.y - R.gy < 0.45) { killNow("shatter"); L.blowMine(M); continue; }
           if (d < 45 && M.z < A.z + 2) addT(M.x, M.y + 0.1, M.z, 0.7, false, () => { if (M.on) L.blowMine(M); });
         }
-        for (const c of BT.chunks) c.m.visible = c.z1 < A.z + 30 && c.z0 > A.z - 150; // only the ground you can see through the fog
+        for (const c of BT.chunks) c.m.visible = c.z1 < A.z + 60 && c.z0 > A.z - 190; // only the ground you can see through the haze
+        for (const b of BT.bagRows) b.im.visible = Math.abs(b.z - A.z) < 190;
         // friendlies: waving for help until you reach them, then they run back the way you came
         for (const F of friendlies) {
           if (F.st === "gone") continue;
