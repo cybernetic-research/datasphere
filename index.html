@@ -133,7 +133,7 @@
 
 <section id="splash">
   <div class="splash-inner">
-    <p class="kicker">Jack in · 7 levels · webxr</p>
+    <p class="kicker">Jack in · 8 levels · webxr</p>
     <h1 class="logo">datasphere</h1>
     <p class="pitch">You are a construct in the grid. Steal data, shoot down Space Paranoids, dial Beijing down a stolen trunk line, crack your way out of a firewall cage, and survive the Polybius cabinet.</p>
     <ul class="levels">
@@ -145,8 +145,8 @@
     </div>
     <p class="note" id="xrNote">Checking for a VR headset…</p>
     <dl class="keys">
-      <dt>Headset</dt><dd>Stick steers · trigger fires where you point · grip boosts · A/B/X/Y god mode · always 1st person · hold stick click to quit a level · Battlefield: left stick walks where you look, A/X jumps · Gauntlet: right stick rolls</dd>
-      <dt>Keys</dt><dd>WASD steers · mouse aims, click fires · Shift boosts · G god mode · V first/third person · Space jumps on the Battlefield · Q/E roll in the Gauntlet · Esc quits a level · M mutes</dd>
+      <dt>Headset</dt><dd>Stick steers · trigger fires where you point · grip boosts · A/B/X/Y god mode · always 1st person · hold stick click to quit a level · Battlefield: left stick walks where you look, A/X jumps · Gauntlet: right stick rolls · Beijing Uplink: put the controllers down and pinch with your hands (or use the trigger)</dd>
+      <dt>Keys</dt><dd>WASD steers · mouse aims, click fires · Shift boosts · G god mode · V first/third person · Space jumps on the Battlefield · Q/E roll in the Gauntlet · drag the cube in the Uplink, G for a hint · Esc quits a level · M mutes</dd>
       <dt>Touch</dt><dd>Drag to steer · Fire, Boost and God buttons · tap targets in the Firewall Trap</dd>
     </dl>
     <p class="note">Hitting a firewall kills you on the spot. ICE cubes shatter and cost 20% integrity. Three neural jacks (lives) per level; each death spills 30% of your buffer.</p>
@@ -182,6 +182,7 @@
   // levels added later shift the unlock index of older saves: The Gauntlet (after Data Run), then the Simian Battlefield (first)
   if (!rec.gauntlet) { if (savedRec && rec.unlocked >= 1) rec.unlocked++; rec.gauntlet = true; }
   if (!rec.battle) { if (savedRec) rec.unlocked++; rec.battle = true; }
+  if (!rec.uplink) { if (savedRec && rec.unlocked >= 4) rec.unlocked++; rec.uplink = true; } // Beijing Uplink slotted in before Call Beijing
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ opts, rec })); } catch (e) {} };
   const lrec = (id) => rec.levels[id] || (rec.levels[id] = { best: null, data: 0, clears: 0, tries: 0 });
 
@@ -589,7 +590,7 @@
     spikeMesh.instanceColor.needsUpdate = true;
   }
   // keyhole outline in "shape" coords: circle of radius KR at the origin, a flared slot below it
-  const KR = 1.15, KS0 = 0.65, KS1 = 0.9, KB = 3.2, KPIV = -1.0, HB = 1.05; // round top just too small to pass flat, so you still have to roll // HB: half the construct's span, which has to line up with the slot
+  const KR = 1.22, KS0 = 0.85, KS1 = 1.15, KB = 4.6, KPIV = -1.7, HB = 1.05; // big hole, but the round top and slot are just too narrow to pass flat: roll ~25° or more // HB: half the construct's span, which has to line up with the slot
   const slotW = (y, d) => KS0 + (KS1 - KS0) * (-y / KB) + d;
   function keyPts(d) {
     let lo = -KR - d, hi = 0; // where the slot edge meets the circle
@@ -677,23 +678,34 @@
   });
 
   // the sim battlefield (level 01): trenches, wire, threats with HUD brackets, and the bunker you jack in from
-  const BT = { trenches: [0, -60, -140, -230, -330], tw: 2, depth: 2.2, bz: -372, bd: 12, wires: [-30, -100, -186, -284], tankZ: -282, gaps: [] };
+  const BT = (() => { // generated each load: ~1.8 km of trench lines, wire and no-man's land, then the bunker
+    const trenches = [0], wires = [], tanks = [];
+    for (let z = 0; z > -1650;) { const nz = Math.round(z - rand(115, 150)); trenches.push(nz); z = nz; }
+    for (let i = 0; i < trenches.length - 1; i++) {
+      const a = trenches[i], b = trenches[i + 1], n = i === 0 ? 1 : Math.random() < 0.5 ? 2 : 1;
+      for (let k = 0; k < n; k++) wires.push(Math.round(lerp(a - 12, b + 12, (k + 0.5 + rand(-0.2, 0.2)) / n)));
+      if (i >= 2 && (i % 2 === 0 || i === trenches.length - 2)) tanks.push(Math.round(lerp(a, b, rand(0.55, 0.7))));
+    }
+    return { trenches, wires, tanks, tw: 2, depth: 2.2, hw: 21, bz: trenches[trenches.length - 1] - 42, bd: 12, gaps: [] };
+  })();
   const battle = new THREE.Group(); battle.visible = false; runScene.add(battle);
   const inTrench = (z) => BT.trenches.find((tz) => Math.abs(z - tz) < BT.tw);
   // rolling ground between the lines: hills, ditches and shell craters, flattened near the trenches, the start and the bunker
   const BUMPS = [];
   {
     const zOk = () => { let z; do { z = rand(BT.bz + 14, -8); } while (BT.trenches.some((tz) => Math.abs(z - tz) < 9)); return z; };
-    for (let i = 0; i < 40; i++) BUMPS.push({ x: rand(-32, 32), z: zOk(), rx: rand(5, 13), rz: rand(4, 10), h: rand(0.8, 2.8) });          // hills
-    for (let i = 0; i < 10; i++) BUMPS.push({ x: rand(-20, 20), z: zOk(), rx: rand(8, 20), rz: rand(1.4, 2.4), h: -rand(0.8, 1.4) });     // ditches
-    for (let i = 0; i < 26; i++) { const r = rand(1.6, 3.4); BUMPS.push({ x: rand(-22, 22), z: zOk(), rx: r, rz: r, h: rand(0.8, 1.5), crater: true }); }
+    for (let i = 0; i < 230; i++) BUMPS.push({ x: rand(-45, 45), z: zOk(), rx: rand(5, 13), rz: rand(4, 10), h: rand(0.8, 2.8) });          // hills
+    for (let i = 0; i < 55; i++) BUMPS.push({ x: rand(-28, 28), z: zOk(), rx: rand(8, 20), rz: rand(1.4, 2.4), h: -rand(0.8, 1.4) });     // ditches
+    for (let i = 0; i < 150; i++) { const r = rand(1.6, 3.4); BUMPS.push({ x: rand(-30, 30), z: zOk(), rx: r, rz: r, h: rand(0.8, 1.5), crater: true }); }
   }
+  const BUCKET = new Map(), NZ = [rand(0, TAU), rand(0, TAU), rand(0, TAU), rand(0, TAU)]; // bumps by 20 m slice of z, and noise phases
+  for (const b of BUMPS) for (let c = Math.floor((b.z - 3 * b.rz) / 20); c <= Math.floor((b.z + 3 * b.rz) / 20); c++) (BUCKET.get(c) || BUCKET.set(c, []).get(c)).push(b);
   function terrain(x, z) {
     let f = Math.min(smooth01((-z - 4) / 8), smooth01((z - BT.bz - 6) / 10));
     for (const tz of BT.trenches) f = Math.min(f, smooth01((Math.abs(z - tz) - BT.tw - 1.2) / 7));
     if (f <= 0) return 0;
-    let h = 0;
-    for (const b of BUMPS) {
+    let h = 0.22 * Math.sin(x * 0.53 + z * 0.19 + NZ[0]) * Math.sin(z * 0.41 - x * 0.17 + NZ[1]) + 0.09 * Math.sin(x * 1.31 + NZ[2]) * Math.sin(z * 1.13 + NZ[3]); // a little roughness
+    for (const b of BUCKET.get(Math.floor(z / 20)) || []) {
       const dx = (x - b.x) / b.rx, dz = (z - b.z) / b.rz, q = dx * dx + dz * dz;
       if (q > 9) continue;
       if (b.crater) { const r = Math.sqrt(q); h += (r < 1 ? -b.h * (1 - q) : 0) + b.h * 0.4 * Math.exp(-(r - 1) * (r - 1) * 7); }
@@ -718,19 +730,26 @@
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`, { side: THREE.DoubleSide });
   {
-    const edges = [80]; BT.trenches.forEach((tz) => edges.push(tz + BT.tw, tz - BT.tw)); edges.push(-520);
-    for (let i = 0; i < edges.length; i += 2) { // displaced ground between trench edges (height is 0 at the edges)
-      const z0 = edges[i], z1 = edges[i + 1], geo = new THREE.PlaneGeometry(200, z0 - z1, 100, Math.ceil((z0 - z1) / 1.5));
-      geo.rotateX(-Math.PI / 2); geo.translate(0, 0, (z0 + z1) / 2);
-      const pa = geo.attributes.position; for (let k = 0; k < pa.count; k++) pa.setY(k, terrain(pa.getX(k), pa.getZ(k)));
-      battle.add(new THREE.Mesh(geo, btGroundMat));
+    const edges = [80]; BT.trenches.forEach((tz) => edges.push(tz + BT.tw, tz - BT.tw)); edges.push(BT.bz - 160);
+    for (let i = 0; i < edges.length; i += 2) { // displaced ground between trench edges (height is 0 at the edges), in chunks so far ones can be skipped
+      const n = Math.ceil((edges[i] - edges[i + 1]) / 40);
+      for (let c = 0; c < n; c++) {
+        const z0 = lerp(edges[i], edges[i + 1], c / n), z1 = lerp(edges[i], edges[i + 1], (c + 1) / n), geo = new THREE.PlaneGeometry(160, z0 - z1, 80, Math.ceil((z0 - z1) / 1.5));
+        geo.rotateX(-Math.PI / 2); geo.translate(0, 0, (z0 + z1) / 2);
+        const pa = geo.attributes.position; for (let k = 0; k < pa.count; k++) pa.setY(k, terrain(pa.getX(k), pa.getZ(k)));
+        const m = new THREE.Mesh(geo, btGroundMat); battle.add(m); BT.chunks = BT.chunks || []; BT.chunks.push({ m, z0, z1 });
+      }
     }
-    for (const tz of BT.trenches) for (const sd of [-1, 1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(200, BT.depth), btGroundMat); w.position.set(0, -BT.depth / 2, tz + sd * BT.tw); battle.add(w); }
-    const tf = new THREE.Mesh(new THREE.PlaneGeometry(200, 620), btGroundMat); tf.rotation.x = -Math.PI / 2; tf.position.set(0, -BT.depth, -220); battle.add(tf);
+    const parts = [];
+    for (const tz of BT.trenches) {
+      for (const sd of [-1, 1]) parts.push([new THREE.PlaneGeometry(160, BT.depth), mat4(0, -BT.depth / 2, tz + sd * BT.tw)]);
+      parts.push([new THREE.PlaneGeometry(160, BT.tw * 2), mat4(0, -BT.depth, tz, -Math.PI / 2)]);
+    }
+    const tm = new THREE.Mesh(mergeGeos(parts), btGroundMat); tm.frustumCulled = false; battle.add(tm);
   }
   const btBoxMat = shader({ ...U }, `void main(){ float e = boxEdge(vUv, 1.4); vec3 col = vCol * (0.07 + e * 0.9); gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`);
   { // sandbag parapets either side of every trench, two layers
-    const bags = []; for (const tz of BT.trenches) for (const sd of [-1, 1]) for (let l = 0; l < 2; l++) for (let x = -45 + l * 0.55; x < 45; x += 1.15) bags.push([x, 0.175 + l * 0.35, tz + sd * (BT.tw + 0.45)]);
+    const bags = []; for (const tz of BT.trenches) for (const sd of [-1, 1]) for (let l = 0; l < 2; l++) for (let x = -40 + l * 0.55; x < 40; x += 1.15) bags.push([x, 0.175 + l * 0.35, tz + sd * (BT.tw + 0.45)]);
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 0.35, 0.6), btBoxMat, bags.length);
     const cA = new C3(0x3d8a4a), cB = new C3(0x5fb86a);
     bags.forEach(([x, y, z], i) => { dummy.position.set(x, y, z); dummy.rotation.set(0, rand(-0.08, 0.08), 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, Math.random() < 0.5 ? cA : cB); });
@@ -739,8 +758,8 @@
   { // barbed wire following the ground: posts and coils with a couple of gaps per line
     const pts = [], posts = [];
     for (const wz of BT.wires) {
-      const g = [rand(-10, -2), rand(2, 10)].map((c) => [c - 1.8, c + 1.8]); BT.gaps.push(g);
-      for (let x = -45; x < 45; x += 3) {
+      const g = [rand(-18, -9), rand(-4, 4), rand(9, 18)].map((c) => [c - 1.8, c + 1.8]); BT.gaps.push(g);
+      for (let x = -40; x < 40; x += 3) {
         if (g.some(([a, b]) => x + 3 > a && x < b)) continue;
         posts.push([x, wz]);
         for (let k = 0; k < 6; k++) { const xa = x + k * 0.5, xb = xa + 0.5, ya = terrain(xa, wz), yb = terrain(xb, wz); pts.push(xa, ya + 0.2 + (k % 2) * 0.7, wz + 0.25, xb, yb + 0.9 - (k % 2) * 0.7, wz - 0.25, xa, ya + 0.5, wz - 0.3, xb, yb + 0.55, wz + 0.3); }
@@ -753,10 +772,10 @@
     im.frustumCulled = false; battle.add(im);
   }
   { // tank traps, decoration only
-    const hog = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 0.25, 2.2), btBoxMat, 60);
-    for (let i = 0; i < 20; i++) {
-      let z; do { z = rand(-350, -10); } while (Math.abs(z - BT.trenches.reduce((a, b) => (Math.abs(z - b) < Math.abs(z - a) ? b : a))) < 5);
-      const x = (Math.random() < 0.5 ? -1 : 1) * rand(8, 26), y = terrain(x, z) + 0.75;
+    const hog = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 0.25, 2.2), btBoxMat, 300);
+    for (let i = 0; i < 100; i++) {
+      let z; do { z = rand(BT.bz + 20, -10); } while (Math.abs(z - BT.trenches.reduce((a, b) => (Math.abs(z - b) < Math.abs(z - a) ? b : a))) < 5);
+      const x = (Math.random() < 0.5 ? -1 : 1) * rand(6, 32), y = terrain(x, z) + 0.75;
       for (let k = 0; k < 3; k++) { dummy.position.set(x, y, z); dummy.rotation.set([0.6, 0, -0.6][k], [0, 1.57, 0][k], k === 1 ? 0.6 : 0); dummy.scale.setScalar(1); dummy.updateMatrix(); hog.setMatrixAt(i * 3 + k, dummy.matrix); hog.setColorAt(i * 3 + k, new C3(0x6fbf7a)); }
     }
     dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1);
@@ -805,20 +824,26 @@
       if (kind === "soldier") { T.body = threatHull(soldierGeo); g.add(T.body); T.max = 2; }
       if (kind === "mg") { g.add(threatHull(nestGeo)); T.gun = threatHull(mgGeo); T.gun.position.y = 1.05; g.add(T.gun); T.max = 6; g.position.set(x, terrain(x, z), z); }
       if (kind === "rec") { const h = new THREE.Group(); h.add(new THREE.Mesh(recGeo, recFill)); h.add(new THREE.LineSegments(new THREE.EdgesGeometry(recGeo, 15), recEdge)); g.add(h); T.max = 16; T.trig = z; }
-      if (kind === "tank") { g.add(threatHull(tankGeo)); T.gun = threatHull(turretGeo); T.gun.position.y = 1.75; g.add(T.gun); T.max = 14; }
+      if (kind === "tank") { g.add(threatHull(tankGeo)); T.gun = threatHull(turretGeo); T.gun.position.y = 1.75; g.add(T.gun); T.max = 14; T.amp = rand(10, BT.hw - 3); }
       T.hp = T.max; threats.push(T);
     };
     const line = (i, xs, mgs, guard) => { const tz = BT.trenches[i]; xs.forEach((x) => add("soldier", x, tz + 1.1, guard)); mgs.forEach((x) => add("mg", x, tz - BT.tw - 2.2, guard)); };
-    line(1, [-9, -3.5, 2.5, 8.5], []);
-    line(2, [-7, -1, 5, 10], [rand(-6, 6)]);
-    line(3, [-10, -4, 3, 9], [rand(-8, -2), rand(2, 8)]);
-    line(4, [-8, -2.5, 2.5, 8], [-5.5, 5.5], true);
-    add("tank", 0, BT.tankZ, true);
-    add("rec", -1, -110); add("rec", 1, -235); // Recognizers from another grid, drifting in over the battlefield
+    const last = BT.trenches.length - 1, spread = (n, w) => Array.from({ length: n }, (_, k) => lerp(-w, w, (k + 0.5) / n) + rand(-1.5, 1.5));
+    for (let i = 1; i <= last; i++) { // lines get busier the deeper you go; the last one guards the bunker
+      const p = (i - 1) / Math.max(1, last - 1);
+      line(i, spread(4 + Math.round(p * 4), BT.hw - 3), i === 1 ? [] : spread(1 + Math.round(p * 2), BT.hw - 6), i === last);
+    }
+    BT.tanks.forEach((z, k) => add("tank", 0, z, k === BT.tanks.length - 1));
+    for (let k = 0; k < 5; k++) add("rec", k % 2 ? 1 : -1, Math.round(lerp(-110, BT.bz + 120, k / 4))); // Recognizers from another grid, drifting in over the battlefield
   }
   // HUD: brackets on every threat, a waypoint over the bunker
   const BRK = (() => { const p = [], c = [[-1, -1], [1, -1], [1, 1], [-1, 1]]; for (const [x, y] of c) { p.push(x, y, 0, x * 0.45, y, 0, x, y, 0, x, y * 0.45, 0); } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(p.map((v) => v * 0.5), 3)); return g; })();
-  const brackets = threats.map(() => { const m = new THREE.LineSegments(BRK, new THREE.LineBasicMaterial({ color: 0xff3a5c, transparent: true, depthTest: false, depthWrite: false, fog: false })); m.renderOrder = 30; m.visible = false; runScene.add(m); return m; });
+  const BRC = Array.from(BRK.attributes.position.array); // 16 corner-line vertices of a unit bracket
+  const brPos = new Float32Array(threats.length * 48), brCol = new Float32Array(threats.length * 48), brGeo = new THREE.BufferGeometry();
+  brGeo.setAttribute("position", new THREE.BufferAttribute(brPos, 3)); brGeo.setAttribute("color", new THREE.BufferAttribute(brCol, 3));
+  const bracketLines = new THREE.LineSegments(brGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: ADD, depthTest: false, depthWrite: false, fog: false }));
+  bracketLines.renderOrder = 30; bracketLines.frustumCulled = false; bracketLines.visible = false; runScene.add(bracketLines);
+  const brC = new C3();
   const waypoint = (() => {
     const c = document.createElement("canvas"); c.width = 512; c.height = 160; const tex = new THREE.CanvasTexture(c);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
@@ -832,28 +857,103 @@
     } };
   })();
   // mines: half-buried discs with a blinking light and a proximity ring on your HUD; step on one and you lose a jack
-  const mineGeo = new THREE.CylinderGeometry(0.38, 0.46, 0.16, 8), mineFill = new THREE.MeshBasicMaterial({ color: 0x163020 });
-  const mineEdge = new THREE.LineBasicMaterial({ color: 0x7fdc8a, transparent: true, opacity: 0.55 }), mineLed = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true });
+  const MN = 220, mineLed = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true });
   const mineRingMat = new THREE.MeshBasicMaterial({ color: 0xffc24a, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const mineRingGeo = new THREE.RingGeometry(0.8, 0.92, 24); mineRingGeo.rotateX(-Math.PI / 2);
+  const mineDiscs = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.38, 0.46, 0.16, 8), new THREE.MeshBasicMaterial({ color: 0x2c5a3a }), MN);
+  const mineLeds = new THREE.InstancedMesh(new THREE.SphereGeometry(0.06, 6, 4), mineLed, MN), mineRings = new THREE.InstancedMesh(mineRingGeo, mineRingMat, MN);
+  [mineDiscs, mineLeds, mineRings].forEach((m) => { m.frustumCulled = false; battle.add(m); });
   const mines = [];
-  for (let i = 0; i < 44; i++) {
+  for (let i = 0; i < MN; i++) {
     let z; do { z = rand(BT.bz + 14, -16); } while (BT.trenches.some((tz) => Math.abs(z - tz) < BT.tw + 2.5) || BT.wires.some((wz) => Math.abs(z - wz) < 2));
-    const x = rand(-12.5, 12.5), g = new THREE.Group();
-    const disc = new THREE.Mesh(mineGeo, mineFill); disc.add(new THREE.LineSegments(new THREE.EdgesGeometry(mineGeo), mineEdge)); g.add(disc);
-    const led = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), mineLed); led.position.y = 0.1; g.add(led);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 0.92, 24), mineRingMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; ring.visible = false; g.add(ring);
-    g.position.set(x, terrain(x, z) + 0.02, z); battle.add(g); mines.push({ g, ring, x, z, on: true });
+    const x = rand(-BT.hw + 0.5, BT.hw - 0.5); mines.push({ i, x, z, y: terrain(x, z) + 0.02, on: true, ring: false });
+  }
+  function mineSet(M, mesh, dy, show) { dummy.position.set(M.x, M.y + dy, M.z); dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(show ? 1 : 0); dummy.updateMatrix(); mesh.setMatrixAt(M.i, dummy.matrix); mesh.instanceMatrix.needsUpdate = true; dummy.scale.setScalar(1); }
+  function mineShow(M) { mineSet(M, mineDiscs, 0, M.on); mineSet(M, mineLeds, 0.1, M.on); mineSet(M, mineRings, 0.12, M.on && M.ring); }
+  // power-ups: a beam of light marks each one from a distance
+  const PU = { repair: { col: 0x5dffb0, label: "REPAIR", sub: "+50% integrity" }, shield: { col: 0x35e6ff, label: "SHIELD", sub: "8 seconds untouchable" }, god: { col: 0xffc24a, label: "GOD CHARGE", sub: "god meter full · G / B to unleash" }, jack: { col: 0xff47d4, label: "SPARE JACK", sub: "+1 neural jack" } };
+  const powerUps = [];
+  {
+    const kinds = ["repair", "repair", "repair", "repair", "repair", "repair", "shield", "shield", "shield", "god", "god", "god", "jack", "jack"];
+    kinds.forEach((kind, i) => {
+      let z; do { z = lerp(-40, BT.bz + 40, (i + rand(0.1, 0.9)) / kinds.length); } while (BT.trenches.some((tz) => Math.abs(z - tz) < BT.tw + 2) && (z -= 6));
+      const x = rand(-BT.hw + 3, BT.hw - 3), col = PU[kind].col, g = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), new THREE.MeshBasicMaterial({ color: col })); core.add(new THREE.LineSegments(new THREE.EdgesGeometry(core.geometry), new THREE.LineBasicMaterial({ color: 0xffffff }))); g.add(core);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.04, 4, 24), new THREE.MeshBasicMaterial({ color: col })); g.add(ring);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 16, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.3, blending: ADD, depthWrite: false })); beam.position.y = 8; g.add(beam);
+      g.position.set(x, terrain(x, z) + 1.1, z); battle.add(g); powerUps.push({ kind, g, core, ring, x, z, on: true });
+    });
   }
   // the odd Space Paranoid crossing overhead, dropping bombs; a ring marks where each one will land
-  const btShips = [0, 1].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
-  const bombs = [0, 1, 2, 3].map(() => { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xff8a1f })); b.visible = false; battle.add(b); return { b, on: false, x: 0, y: 0, z: 0, vy: 0, ring: null }; });
-  const mortars = [0, 1, 2, 3].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(2.7, 3.1, 28), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.visible = false; battle.add(m); return { m, on: false, x: 0, z: 0, t: 0 }; });
+  const btShips = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(shipGeo, shipFill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(shipGeo, 15), shipEdge)); g.scale.setScalar(1.4); g.visible = false; battle.add(g); return { g, on: false, x: 0, y: 0, z: 0, vx: 0, hp: 3, dropT: 0, flash: 0 }; });
+  const bombs = [0, 1, 2, 3, 4, 5].map(() => { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshBasicMaterial({ color: 0xff8a1f })); b.visible = false; battle.add(b); return { b, on: false, x: 0, y: 0, z: 0, vy: 0, ring: null }; });
+  const mortars = [0, 1, 2, 3, 4, 5].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(2.7, 3.1, 28), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.visible = false; battle.add(m); return { m, on: false, x: 0, z: 0, t: 0 }; });
   const flareGlow = (() => {
     const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
     r.addColorStop(0, "rgba(220,255,200,0.9)"); r.addColorStop(0.25, "rgba(140,255,150,0.35)"); r.addColorStop(1, "rgba(60,255,120,0)"); g.fillStyle = r; g.fillRect(0, 0, 128, 128);
     return new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), blending: ADD, depthWrite: false, fog: false, transparent: true });
   })();
   const flares = [0, 1, 2].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xeaffd0, fog: false }))); const sp = new THREE.Sprite(flareGlow); sp.scale.setScalar(9); g.add(sp); battle.add(g); return g; });
+
+  // ---- Beijing Uplink: Johnny's data cube, twisted with your hands (or a controller / mouse)
+  const uplink = new THREE.Group(); uplink.visible = false; runScene.add(uplink);
+  const cubeRoot = new THREE.Group(); uplink.add(cubeRoot);
+  const CS = 0.12, CUBIE = 0.108, AXV = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
+  const FACE_COL = [0xff2a52, 0xff8a1f, 0xffffff, 0xffe04a, 0x35e6ff, 0x5dffb0]; // +x -x +y -y +z -z
+  const cubies = [];
+  {
+    const body = new THREE.BoxGeometry(CUBIE, CUBIE, CUBIE), sticker = new THREE.PlaneGeometry(CUBIE * 0.84, CUBIE * 0.84);
+    const bodyMat = new THREE.MeshBasicMaterial({ color: 0x0a0618 }), edgeMat = new THREE.LineBasicMaterial({ color: 0x8ff6ff, transparent: true, opacity: 0.55 });
+    const stickerMats = FACE_COL.map((c) => new THREE.MeshBasicMaterial({ color: c }));
+    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
+      if (!x && !y && !z) continue;
+      const g = new THREE.Group(), m = new THREE.Mesh(body, bodyMat); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(body), edgeMat)); g.add(m);
+      const c = { g, body: m, home: [x, y, z], pos: [x, y, z], q: new THREE.Quaternion(), stickers: [] };
+      [x, y, z].forEach((v, a) => {
+        if (!v) return;
+        const n = AXV[a].clone().multiplyScalar(v), col = a * 2 + (v > 0 ? 0 : 1), st = new THREE.Mesh(sticker, stickerMats[col]);
+        st.position.copy(n).multiplyScalar(CUBIE / 2 + 0.0015); st.quaternion.setFromUnitVectors(new V3(0, 0, 1), n); g.add(st);
+        c.stickers.push({ n, col });
+      });
+      m.userData.cubie = c; cubeRoot.add(g); cubies.push(c);
+    }
+  }
+  const cubeQ = new THREE.Quaternion(), cubeV = new V3();
+  function placeCubie(c, q) {
+    c.g.position.set(c.pos[0] * CS, c.pos[1] * CS, c.pos[2] * CS); c.g.quaternion.copy(c.q);
+    if (q) { c.g.position.applyQuaternion(q); c.g.quaternion.premultiply(q); }
+  }
+  function applyMove(m) { // commit a quarter turn of one slice
+    cubeQ.setFromAxisAngle(AXV[m.axis], (m.dir * Math.PI) / 2);
+    for (const c of cubies) if (c.pos[m.axis] === m.layer) {
+      cubeV.set(...c.pos).applyQuaternion(cubeQ); c.pos = [Math.round(cubeV.x), Math.round(cubeV.y), Math.round(cubeV.z)];
+      c.q.premultiply(cubeQ);
+    }
+  }
+  function cubeSolved() { // every outward face shows one colour
+    const seen = {};
+    for (const c of cubies) for (const st of c.stickers) {
+      cubeV.copy(st.n).applyQuaternion(c.q); const k = `${Math.round(cubeV.x)},${Math.round(cubeV.y)},${Math.round(cubeV.z)}`;
+      if (seen[k] === undefined) seen[k] = st.col; else if (seen[k] !== st.col) return false;
+    }
+    return true;
+  }
+  // hint: an arrow around the slice to turn next
+  const hintArrow = (() => {
+    const g = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color: 0xffc24a, transparent: true, depthTest: false }), arcA = Math.PI * 0.7;
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.007, 4, 40, arcA), mat), head = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.065, 8), mat);
+    head.position.set(Math.cos(arcA) * 0.27, Math.sin(arcA) * 0.27, 0); head.rotation.z = arcA;
+    arc.renderOrder = head.renderOrder = 40; g.add(arc, head); g.visible = false; cubeRoot.add(g); g.userData.mat = mat; return g;
+  })();
+  // your hands, drawn as glowing joints (the data gloves)
+  const handDots = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.009, 0), new THREE.MeshBasicMaterial({ fog: false }), 60);
+  handDots.frustumCulled = false; handDots.visible = false; uplink.add(handDots); handDots.setColorAt(0, new C3(1, 1, 1));
+  // backdrop: a wireframe globe with Beijing lit, slow rings, a grid floor
+  const upGlobe = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.SphereGeometry(5, 18, 12)), new THREE.LineBasicMaterial({ color: 0x35e6ff, transparent: true, opacity: 0.35, fog: false }));
+  upGlobe.position.set(0, 2.5, -16); uplink.add(upGlobe);
+  const upBeijing = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a52, fog: false })); upBeijing.position.set(3.2, 2.4, 3.4); upGlobe.add(upBeijing);
+  const upRings = [0.42, 0.5].map((r, i) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.003, 4, 64), new THREE.MeshBasicMaterial({ color: i ? 0xff47d4 : 0x35e6ff, transparent: true, opacity: 0.6 })); cubeRoot.parent.add(m); return m; });
+  const upFloor = new THREE.Mesh(new THREE.CircleGeometry(30, 48), makeFloorMat(U, 0x35e6ff, 0x7a5cff, 0)); upFloor.rotation.x = -Math.PI / 2; uplink.add(upFloor);
 
   // ---- the security program: a giant head that assembles itself out of towers
   const BOSS_N = 96, BS = 1.7;
@@ -1148,6 +1248,7 @@
       trap: { bpm: 92, bass: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6, 7], roots: [0, 0, 1, 0], arp: [0, 6, 12, 13, 12, 6, 1, 0] },
       battle: { bpm: 96, bass: [0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, -2, 0, -2, 0], roots: [0, 0, -4, -5], arp: [0, 7, 12, 7, 3, 7, 12, 15] },
       gauntlet: { bpm: 130, bass: [0, 0, 0, 12, 0, 0, 10, 0, 0, 0, 0, 12, 0, 7, 10, 12], roots: [0, -3, -5, -7], arp: [0, 3, 7, 12, 15, 12, 7, 3] },
+      uplink: { bpm: 84, bass: [0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 5, 0, 3, 0], roots: [0, -2, -5, -7], arp: [0, 12, 7, 15, 12, 19, 15, 24] },
       polybius: { bpm: 138, bass: [0, 12, 0, 12, 3, 15, 3, 15, 5, 17, 5, 17, 7, 19, 10, 22], roots: [0, -2, -4, -5], arp: [0, 7, 12, 15, 19, 24, 19, 15] },
     };
     let tr = TRACKS.hub;
@@ -1281,7 +1382,7 @@
     const { g, c } = vrTitle; g.clearRect(0, 0, c.width, c.height);
     g.textAlign = "center"; g.fillStyle = COL.cyan; g.shadowColor = COL.cyan; g.shadowBlur = 30;
     g.font = `150px ${DFONT}`; g.fillText("datasphere", 512, 190);
-    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("JACK IN · 7 LEVELS", 512, 262);
+    g.shadowBlur = 0; g.fillStyle = COL.mag; g.font = `34px ${FONT}`; g.fillText("JACK IN · 8 LEVELS", 512, 262);
     g.fillStyle = COL.ink; g.font = `38px ${FONT}`; g.fillText("pull the trigger to enter the hub", 512, 344);
     vrTitle.tex.needsUpdate = true;
   }
@@ -1492,7 +1593,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = false; brackets.forEach((b) => (b.visible = false));
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false;
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -1510,6 +1611,7 @@
     tunnel: { fog: 0x03100c, dens: 0.011, a: 0x5dffb0, b: 0x35e6ff, world: false },
     cage: { fog: 0x12020a, dens: 0.012, a: 0xff2a3a, b: 0x3a0010, world: false },
     poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
+    uplink: { fog: 0x02060f, dens: 0.02, a: 0x35e6ff, b: 0x7a5cff, world: false },
     battle: { fog: 0x03140a, dens: 0.016, a: 0x2f8f4a, b: 0x9fff9a, world: false },
     gauntlet: { fog: 0x07021a, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
   };
@@ -1518,7 +1620,7 @@
     floor.visible = towers.visible = landmarks.visible = streaks.visible = e.world;
     tunnel.visible = name === "tunnel"; cage.visible = name === "cage"; polyGroup.visible = name === "poly";
     corridor.visible = spikeMesh.visible = name === "gauntlet";
-    battle.visible = name === "battle";
+    battle.visible = name === "battle"; uplink.visible = name === "uplink";
     R.fogBase.set(e.fog); R.floorA.set(e.a); R.floorB.set(e.b);
     runScene.fog.color.copy(R.fogBase); runScene.fog.density = U.uFogDensity.value = e.dens;
     if (e.world) { reseedTowers(A.z); reseedStreaks(A.z); }
@@ -1767,7 +1869,7 @@
   }
   function shootStep(dt) {
     reticles.forEach((r) => (r.visible = false));
-    if (!R || R.demo || R.L.lane) return;
+    if (!R || R.demo || R.L.lane || R.L.noShoot) return;
     const live = alive();
     const camW = tmpV2.setFromMatrixPosition(camera.matrixWorld);
     for (const a of IN.aims) {
@@ -1989,7 +2091,8 @@
         for (const T of threats) Object.assign(T, { on: true, hp: T.max, st: T.kind === "rec" ? "wait" : "down", up: 0, t: rand(0, 2), fireT: rand(1, 2.5), burst: 0, flash: 0 }), (T.g.visible = T.kind !== "rec");
         R.by = A.y; R.vy = 0; R.jumping = false; R.gy = A.y;
         mortars.forEach((m) => { m.on = false; m.m.visible = false; });
-        mines.forEach((M) => { M.on = true; M.g.visible = true; M.ring.visible = false; });
+        mines.forEach((M) => { M.on = true; M.ring = false; mineShow(M); });
+        powerUps.forEach((P) => { P.on = true; P.g.visible = true; });
         btShips.forEach((S2) => { S2.on = false; S2.g.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
         flares.forEach((f, i) => f.position.set(rand(-25, 25), 20 + i * 9, rand(-30, -90)));
         bunkerDoor.position.y = 1.5; doorEdge.material.color.set(0xff3a5c); jackPort.visible = true;
@@ -2009,7 +2112,7 @@
         mortars.forEach((m) => { m.on = false; m.m.visible = false; }); bombs.forEach((b) => { b.on = false; b.b.visible = false; });
       },
       blowMine(M) {
-        M.on = false; M.g.visible = false; const y = M.g.position.y;
+        M.on = false; M.ring = false; mineShow(M); const y = M.y;
         burst(M.x, y + 0.6, M.z, C_ORANGE, 70); burst(M.x, y + 1.2, M.z, C_RED, 40); shatterCube(M.x, y + 0.3, M.z, C_HEAL, 14); Sound.boom(true); pulse(1, 250);
         if (alive() && Math.hypot(A.x - M.x, A.z - M.z) < 4) damage(40, "MINE BLAST", A.x, A.y, A.z);
       },
@@ -2037,7 +2140,7 @@
         A.vx += ((fx * go - fz * side) * sp - A.vx) * Math.min(1, dt * 7); R.vz += ((fz * go + fx * side) * sp - R.vz) * Math.min(1, dt * 7);
         R.wireT = Math.max(0, R.wireT - dt); R.wireHit -= dt;
         prev.set(A.x, A.y, A.z);
-        A.x = clamp(A.x + A.vx * dt, -13, 13); A.z = Math.min(2, A.z + R.vz * dt);
+        A.x = clamp(A.x + A.vx * dt, -BT.hw, BT.hw); A.z = Math.min(2, A.z + R.vz * dt);
         const B0 = BT.bz;
         if (!jack) {
           // the bunker is solid apart from its doorway, which stays shut until the guard is down
@@ -2071,6 +2174,7 @@
         for (const T of threats) {
           if (!T.on) continue;
           if (T.guard) guardLeft++;
+          if (T.kind !== "rec") { const near = Math.abs(A.z - T.z) < 150; T.g.visible = near; if (!near) continue; } // only the nearby part of the 1.8 km field is live
           T.flash = Math.max(0, T.flash - dt * 4); T.t -= dt;
           const ahead = A.z - T.z, active = live && !jack && ahead > -1.5 && ahead < (T.kind === "soldier" ? 75 : 95);
           let cx = T.g.position.x, cy = T.g.position.y + 0.9, cr = 1.3;
@@ -2092,13 +2196,13 @@
             if (T.st === "wait") { if (A.z < T.trig && live && !jack) { T.st = "in"; T.age = 0; T.g.visible = true; T.g.position.set(T.x * 26, 42, A.z - 130); Sound.boom(true); showMsg("RECOGNIZER", "something from another grid is drifting in", COL.amber, 2.4); } else continue; }
             // drifts slowly to hover ahead of you, then fires spreads down at you
             T.age += dt;
-            const gx = Math.sin(t * 0.13 + T.ph) * 10, gz = Math.max(BT.bz + 25, A.z - 42), k = Math.min(1, dt * 0.22);
+            const gx = Math.sin(t * 0.13 + T.ph) * 14, gz = Math.max(BT.bz + 25, A.z - 42), k = Math.min(1, dt * 0.22);
             const P = T.g.position; P.x += (gx - P.x) * k; P.y += (12 + Math.sin(t * 0.5 + T.ph) * 1.5 - P.y) * k; P.z += (gz - P.z) * k;
             T.z = P.z; T.g.rotation.y = Math.atan2(A.x - P.x, A.z - P.z);
             cx = P.x; cy = P.y + 1.5; cr = 5;
             if (live && !jack && T.age > 7) { T.fireT -= dt; if (T.fireT <= 0) { T.fireT = rand(3.5, 4.8); enemyFire(btV.set(P.x, P.y - 1, P.z + 2), 3, 0.09, 20, 9); } }
           } else {
-            const ph = t * 0.22 + T.ph; T.x = Math.sin(ph) * 11;
+            const ph = t * 0.22 + T.ph; T.x = Math.sin(ph) * T.amp;
             T.g.position.set(T.x, Math.max(terrain(T.x - 1.8, T.z - 2.5), terrain(T.x + 1.8, T.z - 2.5), terrain(T.x - 1.8, T.z + 2.5), terrain(T.x + 1.8, T.z + 2.5)), T.z); T.g.rotation.y = lerp(T.g.rotation.y, Math.cos(ph) > 0 ? Math.PI / 2 : -Math.PI / 2, Math.min(1, dt * 1.5));
             const yw = Math.atan2(A.x - T.x, A.z - T.z); T.gun.rotation.y = yw - T.g.rotation.y;
             cx = T.x; cy = T.g.position.y + 1.3; cr = 2.4;
@@ -2112,17 +2216,32 @@
         // mines: the HUD rings any within 9 m; step on one (feet on the ground) and it takes a whole jack
         mineLed.opacity = Math.sin(t * 5) > 0.5 ? 1 : 0.25; mineRingMat.opacity = 0.45 + 0.4 * Math.sin(t * 9);
         for (const M of mines) {
-          if (!M.on) continue;
-          const d = Math.hypot(A.x - M.x, A.z - M.z);
-          M.ring.visible = live && !jack && d < 9;
+          if (!M.on || Math.abs(A.z - M.z) > 70) continue;
+          const d = Math.hypot(A.x - M.x, A.z - M.z), ring = live && !jack && d < 9;
+          if (ring !== M.ring) { M.ring = ring; mineShow(M); }
           if (live && !jack && d < 0.85 && A.y - R.gy < 0.45) { killNow("shatter"); L.blowMine(M); continue; }
-          if (d < 45 && M.z < A.z + 2) addT(M.x, M.g.position.y + 0.1, M.z, 0.7, false, () => { if (M.on) L.blowMine(M); });
+          if (d < 45 && M.z < A.z + 2) addT(M.x, M.y + 0.1, M.z, 0.7, false, () => { if (M.on) L.blowMine(M); });
+        }
+        for (const c of BT.chunks) c.m.visible = c.z1 < A.z + 30 && c.z0 > A.z - 150; // only the ground you can see through the fog
+        // power-ups
+        for (const P of powerUps) {
+          if (!P.on) continue;
+          P.g.visible = Math.abs(A.z - P.z) < 160; if (!P.g.visible) continue;
+          P.core.rotation.y += dt * 2; P.ring.rotation.x = Math.PI / 2 + Math.sin(t * 2) * 0.3; P.core.position.y = Math.sin(t * 2.4 + P.x) * 0.12;
+          if (live && !jack && Math.hypot(A.x - P.x, A.z - P.z) < 1.6 && Math.abs(A.y - P.g.position.y) < 2.4) {
+            P.on = false; P.g.visible = false; const d = PU[P.kind];
+            if (P.kind === "repair") R.integrity = Math.min(100, R.integrity + 50);
+            if (P.kind === "shield") R.inv = Math.max(R.inv, 8);
+            if (P.kind === "god") R.god = 100;
+            if (P.kind === "jack") R.lives = Math.min(5, R.lives + 1);
+            burst(P.x, P.g.position.y, P.z, new C3(d.col), 50); Sound.heal(); showMsg(d.label, d.sub, "#" + new C3(d.col).getHexString(), 1.8);
+          }
         }
         // the odd Space Paranoid drifting across overhead, dropping a bomb now and then
         if (live && !jack && R.stage === "advance" && A.z < -20) R.shipT -= dt;
         if (R.shipT <= 0) {
-          R.shipT = rand(20, 32); const S2 = btShips.find((q) => !q.on);
-          if (S2) { const dir = Math.random() < 0.5 ? -1 : 1; Object.assign(S2, { on: true, x: -dir * 70, y: rand(20, 26), z: A.z - rand(15, 40), vx: dir * 8, hp: 3, dropT: rand(0.5, 1.5), flash: 0 }); S2.g.visible = true; S2.g.rotation.set(0, dir * Math.PI / 2, 0); Sound.whoosh(); }
+          R.shipT = rand(11, 20);
+          for (const S2 of btShips.filter((q) => !q.on).slice(0, Math.random() < 0.3 ? 2 : 1)) { const dir = Math.random() < 0.5 ? -1 : 1; Object.assign(S2, { on: true, x: -dir * 70, y: rand(20, 26), z: A.z - rand(15, 40), vx: dir * 8, hp: 3, dropT: rand(0.5, 1.5), flash: 0 }); S2.g.visible = true; S2.g.rotation.set(0, dir * Math.PI / 2, 0); Sound.whoosh(); }
         }
         for (const S2 of btShips) {
           if (!S2.on) continue;
@@ -2182,14 +2301,20 @@
         updatePackets(dt, t, false);
         // HUD: brackets on every threat in range, waypoint over the bunker
         const camW = btV2.setFromMatrixPosition(camera.matrixWorld);
+        const e = camera.matrixWorld.elements; let nb = 0; // brackets face the camera: corners along its right and up vectors
         threats.forEach((T, i) => {
-          const b = brackets[i], show = T.on && T.st !== "wait" && live && !R.over && !jack && Math.abs(A.z - T.z) < 120 && T.z < A.z + 6;
-          b.visible = show; if (!show) return;
-          const y = T.g.position.y + (T.kind === "soldier" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
-          b.position.set(T.g.position.x, y, T.z); b.lookAt(camW); b.scale.setScalar(Math.max(sz, b.position.distanceTo(camW) * 0.045));
-          b.material.color.set(T.flash > 0 ? 0xffffff : T.guard ? 0xffc24a : 0xff3a5c);
-          b.material.opacity = T.kind === "soldier" && T.up < 0.5 ? 0.3 : 0.65 + 0.35 * Math.sin(t * 8 + i);
+          if (!(T.on && T.st !== "wait" && live && !R.over && !jack && Math.abs(A.z - T.z) < 120 && T.z < A.z + 6)) return;
+          const cy = T.g.position.y + (T.kind === "soldier" ? 1.2 : T.kind === "mg" ? 0.9 : T.kind === "rec" ? 1.5 : 1.4), sz = T.kind === "rec" ? 15 : T.kind === "tank" ? 4.6 : T.kind === "mg" ? 2.8 : 1.7;
+          const cx = T.g.position.x, cz = T.z, k = Math.max(sz, Math.hypot(cx - camW.x, cy - camW.y, cz - camW.z) * 0.045);
+          brC.set(T.flash > 0 ? 0xffffff : T.guard ? 0xffc24a : 0xff3a5c).multiplyScalar(T.kind === "soldier" && T.up < 0.5 ? 0.3 : 0.65 + 0.35 * Math.sin(t * 8 + i));
+          for (let v = 0; v < 16; v++) {
+            const px = BRC[v * 3] * k, py = BRC[v * 3 + 1] * k, o = (nb * 16 + v) * 3;
+            brPos[o] = cx + e[0] * px + e[4] * py; brPos[o + 1] = cy + e[1] * px + e[5] * py; brPos[o + 2] = cz + e[2] * px + e[6] * py;
+            brCol[o] = brC.r; brCol[o + 1] = brC.g; brCol[o + 2] = brC.b;
+          }
+          nb++;
         });
+        brGeo.setDrawRange(0, nb * 16); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
         const wd = Math.max(0, A.z - B0);
         waypoint.m.visible = live && !R.over && !jack && A.z > B0 + 1;
         waypoint.m.position.set(0, 7.5, B0); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
@@ -2249,7 +2374,7 @@
       spawnRow(z) {
         const k = this.diff();
         // the safe lane wanders between targets, never faster than the construct can follow
-        if (Math.abs(R.ltx - R.lx) < 0.5 && Math.abs(R.lty - R.ly) < 0.5) { R.ltx = rand(-7.5, 7.5); R.lty = rand(2.6, 10.2); }
+        if (Math.abs(R.ltx - R.lx) < 0.5 && Math.abs(R.lty - R.ly) < 0.5) { R.ltx = rand(-7.5, 7.5); R.lty = rand(4.4, 9.2); }
         const step = 0.9 + k * 0.5;
         R.lx += clamp(R.ltx - R.lx, -step, step); R.ly += clamp(R.lty - R.ly, -step * 0.8, step * 0.8);
         const safe = 1.9 - k * 0.45, pist = k < 0.15 ? 0 : 0.08 + k * 0.3;
@@ -2289,6 +2414,7 @@
         while (R.stage === "run" && R.kSpawned < this.keys && R.nRow > H) {
           if (R.rowsLeft > 0) { this.spawnRow(R.nRow); R.rowsLeft--; R.nRow -= rand(5, 6.5); }
           else {
+            R.ly = R.lty = clamp(R.ly, 4.4, 9.2); // keep the big keyhole clear of the floor and ceiling
             for (let i = 0; i < 3; i++) spawnPacket(R.lx, R.ly, R.nRow + 2 - i * 3, 0);
             this.spawnKeyWall(R.nRow - 10);
             R.nRow -= 38; R.rowsLeft = 11 + R.kSpawned;
@@ -2383,7 +2509,137 @@
       },
     },
     { // ---------------------------------------------------------------- 05
-      id: "beijing", num: "05", name: "Call Beijing", col: COL.heal, music: "beijing", number: "861065123847",
+      id: "uplink", num: "05", name: "Beijing Uplink", col: COL.cyan, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
+      blurb: "Johnny's call. Twist the data cube with your hands (or controllers) to open the line to Beijing before the trace lands.",
+      init() {
+        setEnv("uplink"); uplink.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
+        Object.assign(R, { stage: "solve", round: 0, trace: 100, idle: 0, hintT: 0, anim: null, grabs: new Map(), placed: false, nextT: 0, sol: [] });
+        cubeRoot.position.set(0, 1.33, -0.62); cubeRoot.quaternion.setFromEuler(new THREE.Euler(0.45, -0.6, 0));
+        this.scramble(3);
+        const xr = renderer.xr.isPresenting;
+        showMsg("BEIJING UPLINK", xr ? "pinch a face and drag to turn it · pinch beside the cube to spin it" : "drag a face to turn it · drag beside the cube to spin it", COL.cyan, 5);
+      },
+      objective() {
+        if (R.stage === "solve") return { label: `Trace ${Math.ceil(R.trace)}% · lock ${R.round + 1} / 2`, text: R.sol.length ? `Solve the data cube · ${renderer.xr.isPresenting ? "B" : "G"} for a hint` : "Solve the data cube", prog: R.round / 2 };
+        return { label: "Line open", text: "Ringing Beijing…", prog: 1 };
+      },
+      onRespawn() { R.trace = 100; R.anim = null; R.grabs.clear(); this.scramble(R.round ? 6 : 3); },
+      scramble(n) {
+        for (const c of cubies) { c.pos = c.home.slice(); c.q.identity(); }
+        R.sol = []; let last = null;
+        for (let i = 0; i < n; i++) {
+          let m; do { m = { axis: (Math.random() * 3) | 0, layer: ((Math.random() * 3) | 0) - 1, dir: Math.random() < 0.5 ? -1 : 1 }; } while (last && m.axis === last.axis && m.layer === last.layer);
+          applyMove(m); R.sol.push({ ...m, dir: -m.dir }); last = m;
+        }
+        cubies.forEach((c) => placeCubie(c)); R.idle = 0;
+      },
+      startMove(m) {
+        if (R.anim) return; R.anim = { m, t: 0 }; Sound.blip(m.axis * 3 + m.layer + 1); R.idle = 0;
+        const top = R.sol[R.sol.length - 1]; // keep a valid solution: undo the top move, or remember how to undo this one
+        if (top && top.axis === m.axis && top.layer === m.layer && top.dir === m.dir) R.sol.pop(); else R.sol.push({ ...m, dir: -m.dir });
+      },
+      afterMove() {
+        if (!cubeSolved()) return;
+        R.sol = []; R.round++; Sound.chime(); burst(cubeRoot.position.x, cubeRoot.position.y, cubeRoot.position.z, C_SIG, 50); R.data += 15;
+        if (R.round < 2) { showMsg("LOCK ONE OPEN", "one more lock on the line", COL.cyan, 2); R.nextT = 1.8; R.stage = "next"; }
+        else { R.stage = "ring"; R.nextT = 3.4; Sound.ringback(); showMsg("RINGING BEIJING", "the line is open", COL.heal, 3.2); }
+      },
+      // pointers: pinching hands (contact), or a ray from a controller trigger / the mouse
+      pointers() {
+        const out = [], xr = renderer.xr.isPresenting;
+        if (xr && XRF) {
+          const ref = renderer.xr.getReferenceSpace(), session = renderer.xr.getSession(); let k = 0;
+          for (const src of session ? session.inputSources : []) {
+            if (src.hand) {
+              const tip = XRF.getJointPose(src.hand.get("index-finger-tip"), ref), th = XRF.getJointPose(src.hand.get("thumb-tip"), ref);
+              for (const j of src.hand.values()) { const p = XRF.getJointPose(j, ref); if (p && k < 60) { const q = p.transform.position; dummy.position.set(q.x, q.y, q.z).applyMatrix4(rig.matrixWorld); dummy.updateMatrix(); handDots.setMatrixAt(k++, dummy.matrix); } }
+              if (!tip || !th) continue;
+              const a = tip.transform.position, b = th.transform.position, d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z), id = "h" + src.handedness;
+              const was = R.grabs.has(id) || (R.pinch && R.pinch[id]); const pressed = d < (was ? 0.04 : 0.022);
+              (R.pinch = R.pinch || {})[id] = pressed;
+              out.push({ id, pressed, hand: true, point: new V3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2).applyMatrix4(rig.matrixWorld) });
+            }
+          }
+          for (let i = k; i < 60; i++) { dummy.position.set(0, -99, 0); dummy.updateMatrix(); handDots.setMatrixAt(i, dummy.matrix); }
+          dummy.position.set(0, 0, 0); dummy.updateMatrix();
+          handDots.visible = k > 0; handDots.instanceMatrix.needsUpdate = true;
+          handDots.material.color.set(Object.values(R.pinch || {}).some(Boolean) ? 0xffc24a : 0x35e6ff);
+          ctrls.forEach((c, i) => { const gp = c.userData.src && c.userData.src.gamepad; if (!gp) return; const r = new THREE.Raycaster(); ctrlRay(c, r); r.far = 5; out.push({ id: "c" + i, pressed: !!(gp.buttons[0] && gp.buttons[0].pressed), ray: r }); });
+        } else {
+          handDots.visible = false; const r = new THREE.Raycaster(); r.setFromCamera(mouse, camera); out.push({ id: "m", pressed: mouseDown, ray: r, ndc: mouse.clone() });
+        }
+        return out;
+      },
+      local(p) { return cubeRoot.worldToLocal(p.clone()); },
+      update(dt, t) {
+        R.speed = 0; construct.root.visible = false; updateTrails(false); keyLight.position.set(0, 2.5, 0.5);
+        const xr = renderer.xr.isPresenting, live = alive();
+        if (xr && !R.placed) { R.placed = true; const h = camera.position; cubeRoot.position.set(h.x, h.y - 0.3, h.z - 0.42).applyMatrix4(rig.matrixWorld); }
+        if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.42, 0, 0); }
+        upGlobe.rotation.y += dt * 0.08; upBeijing.scale.setScalar(1 + 0.3 * Math.sin(t * 6));
+        upRings.forEach((m, i) => { m.position.copy(cubeRoot.position); m.rotation.set(t * (0.3 + i * 0.2), t * (0.5 - i * 0.3), 0); });
+        if (R.stage === "solve" && live) { R.trace -= dt * (R.round ? 0.75 : 0.6); if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
+        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.scramble(6); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `Beijing in ${fmtTime(R.time)} · now dial`); } } }
+        // turning animation
+        if (R.anim) {
+          R.anim.t += dt / 0.22; const m = R.anim.m, k = smooth01(R.anim.t);
+          const q = new THREE.Quaternion().setFromAxisAngle(AXV[m.axis], (m.dir * Math.PI * k) / 2);
+          for (const c of cubies) if (c.pos[m.axis] === m.layer) placeCubie(c, q);
+          if (R.anim.t >= 1) { applyMove(m); cubies.forEach((c) => placeCubie(c)); R.anim = null; this.afterMove(); }
+        }
+        // input
+        const ptrs = this.pointers(), half = CS * 1.5, seen = new Set();
+        for (const P of ptrs) {
+          seen.add(P.id); let G = R.grabs.get(P.id);
+          if (!P.pressed || !live || R.stage !== "solve") { R.grabs.delete(P.id); continue; }
+          if (!G) { // press: grab a face to turn a slice, or grab beside the cube to spin it
+            let hitL = null;
+            if (P.hand) { const l = this.local(P.point); if (Math.max(Math.abs(l.x), Math.abs(l.y), Math.abs(l.z)) < half + 0.03) hitL = l; else if (l.length() < 0.45) G = { mode: "spin", last: P.point.clone() }; }
+            else { const h = P.ray.intersectObjects(cubies.map((c) => c.body))[0]; if (h) hitL = this.local(h.point); else G = { mode: "spin", last: P.ndc ? P.ndc.clone() : P.ray.ray.direction.clone() }; }
+            if (hitL) {
+              const ab = [Math.abs(hitL.x), Math.abs(hitL.y), Math.abs(hitL.z)], na = ab.indexOf(Math.max(...ab)), ns = Math.sign(hitL.getComponent(na)) || 1;
+              const cp = [hitL.x, hitL.y, hitL.z].map((v) => clamp(Math.round(v / CS), -1, 1)); cp[na] = ns;
+              G = { mode: "turn", na, ns, p0: hitL, cubie: cubies.find((c) => c.pos[0] === cp[0] && c.pos[1] === cp[1] && c.pos[2] === cp[2]), done: false };
+            }
+            if (G) R.grabs.set(P.id, G);
+            continue;
+          }
+          if (G.mode === "turn" && !G.done && !R.anim && G.cubie) {
+            let p;
+            if (P.hand) p = this.local(P.point);
+            else { // where the ray meets the grabbed face's plane, in cube space
+              const inv = new THREE.Matrix4().copy(cubeRoot.matrixWorld).invert(), o = P.ray.ray.origin.clone().applyMatrix4(inv), d = P.ray.ray.direction.clone().transformDirection(inv);
+              const dn = d.getComponent(G.na); if (Math.abs(dn) < 1e-4) continue; const s2 = (G.p0.getComponent(G.na) - o.getComponent(G.na)) / dn; if (s2 < 0) continue; p = o.addScaledVector(d, s2);
+            }
+            const dv = p.sub(G.p0); dv.setComponent(G.na, 0);
+            if (dv.length() > (P.hand ? 0.03 : 0.025)) {
+              const a = Math.abs(dv.x) >= Math.abs(dv.y) && Math.abs(dv.x) >= Math.abs(dv.z) ? 0 : Math.abs(dv.y) >= Math.abs(dv.z) ? 1 : 2;
+              const r = AXV[G.na].clone().multiplyScalar(G.ns).cross(AXV[a].clone().multiplyScalar(Math.sign(dv.getComponent(a))));
+              const axis = Math.abs(r.x) > 0.5 ? 0 : Math.abs(r.y) > 0.5 ? 1 : 2;
+              this.startMove({ axis, layer: G.cubie.pos[axis], dir: Math.sign(r.getComponent(axis)) }); G.done = true;
+            }
+          } else if (G.mode === "spin") { // trackball-ish: drag sideways to yaw, up/down to pitch
+            let yaw = 0, pitch = 0;
+            if (P.hand) { yaw = (P.point.x - G.last.x) * 9; pitch = -(P.point.y - G.last.y) * 9; G.last.copy(P.point); }
+            else if (P.ndc) { yaw = (P.ndc.x - G.last.x) * 3; pitch = -(P.ndc.y - G.last.y) * 3; G.last.copy(P.ndc); }
+            else { const d = P.ray.ray.direction; yaw = (d.x - G.last.x) * 4; pitch = -(d.y - G.last.y) * 4; G.last.copy(d); }
+            cubeRoot.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AXV[1], yaw)).premultiply(new THREE.Quaternion().setFromAxisAngle(AXV[0], -pitch));
+          }
+        }
+        for (const id of [...R.grabs.keys()]) if (!seen.has(id)) R.grabs.delete(id);
+        // hint: on request (G / B), or after 25 s without a turn
+        R.idle += dt; R.hintT = Math.max(0, R.hintT - dt); if (IN.god) R.hintT = 4;
+        const top = R.sol[R.sol.length - 1], showHint = top && R.stage === "solve" && !R.anim && (R.hintT > 0 || R.idle > 25);
+        hintArrow.visible = !!showHint;
+        if (showHint) {
+          hintArrow.quaternion.setFromUnitVectors(new V3(0, 0, 1), AXV[top.axis].clone().multiplyScalar(top.dir));
+          hintArrow.position.copy(AXV[top.axis]).multiplyScalar(top.layer * CS); hintArrow.userData.mat.opacity = 0.55 + 0.45 * Math.sin(t * 8);
+        }
+        for (const c of cubies) if (!R.anim) c.g.scale.setScalar(showHint && c.pos[top.axis] === top.layer ? 1 + 0.06 * (0.5 + 0.5 * Math.sin(t * 8)) : 1);
+      },
+    },
+    { // ---------------------------------------------------------------- 06
+      id: "beijing", num: "06", name: "Call Beijing", col: COL.heal, music: "beijing", number: "861065123847",
       blurb: "Ride the trunk line. Fly through the right digit at each gate to dial +86 10 6512 3847 before a trace finds you.",
       init() {
         setEnv("tunnel"); R.zT0 = A.z - 10; tunnelMat.uniforms.uT0.value = R.zT0; R.rx = A.x; R.ry = A.y - 6;
@@ -2473,8 +2729,8 @@
       },
       spawnBar(z) { const b = bars.find((b) => !b.on); if (!b) return; Object.assign(b, { on: true, z, a: rand(0, Math.PI), w: (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 1.1), passed: false }); b.m.visible = true; },
     },
-    { // ---------------------------------------------------------------- 06
-      id: "trap", num: "06", name: "Firewall Trap", col: COL.alarm, music: "trap", noGod: true, static: true, tapAim: true, aimDist: 9,
+    { // ---------------------------------------------------------------- 07
+      id: "trap", num: "07", name: "Firewall Trap", col: COL.alarm, music: "trap", noGod: true, static: true, tapAim: true, aimDist: 9,
       blurb: "You're caged in a shrinking firewall. Lock the rotating rings when their gaps line up, then repeat the echo code.",
       init() {
         setEnv("cage"); trapGroup.visible = true;
@@ -2571,8 +2827,8 @@
         updateIce(dt, t);
       },
     },
-    { // ---------------------------------------------------------------- 07
-      id: "polybius", num: "07", name: "Polybius", col: COL.violet, music: "polybius", lane: true, godName: "SUPERZAPPER",
+    { // ---------------------------------------------------------------- 08
+      id: "polybius", num: "08", name: "Polybius", col: COL.violet, music: "polybius", lane: true, godName: "SUPERZAPPER",
       blurb: "The cabinet nobody remembers. Hold the rim, shoot down the tube, survive four waves and the core.",
       init() {
         setEnv("poly"); R.wave = 0; R.u = 0.5; R.spawnLeft = 0; R.spawnT = 0; R.core = 0; R.coreHp = 90; R.laneCD = 0;
@@ -2749,16 +3005,16 @@
     const g = p.g, W = p.c.width;
     frame(p, "levels");
     LEVELS.forEach((L, i) => {
-      const y = 104 + i * 126, h = 116, locked = i > rec.unlocked, r = lrec(L.id);
+      const y = 100 + i * 111, h = 102, locked = i > rec.unlocked, r = lrec(L.id);
       btn(p, 30, y, W - 60, h, locked ? () => { Sound.buzz(); } : () => startLevel(i), (g, hov) => {
-        g.fillStyle = locked ? COL.dim : L.col; g.font = `40px ${FONT}`; g.fillText(`${L.num}  ${L.name.toUpperCase()}`, 56, y + 46);
-        g.fillStyle = locked ? "rgba(143,151,200,0.7)" : COL.ink; g.font = `21px ${FONT}`;
-        const words = (locked ? `Locked · clear ${LEVELS[i - 1].name} to open it` : L.blurb).split(" "); let line = "", ly = y + 78;
-        for (const w of words) { if (g.measureText(line + w).width > W - 330) { g.fillText(line, 56, ly); line = ""; ly += 25; } line += w + " "; }
+        g.fillStyle = locked ? COL.dim : L.col; g.font = `36px ${FONT}`; g.fillText(`${L.num}  ${L.name.toUpperCase()}`, 56, y + 40);
+        g.fillStyle = locked ? "rgba(143,151,200,0.7)" : COL.ink; g.font = `19px ${FONT}`;
+        const words = (locked ? `Locked · clear ${LEVELS[i - 1].name} to open it` : L.blurb).split(" "); let line = "", ly = y + 68;
+        for (const w of words) { if (g.measureText(line + w).width > W - 330) { g.fillText(line, 56, ly); line = ""; ly += 23; } line += w + " "; }
         g.fillText(line, 56, ly);
         g.textAlign = "right"; g.font = `26px ${FONT}`; g.fillStyle = r.best !== null ? COL.heal : COL.dim;
-        g.fillText(r.best !== null ? `BEST ${fmtTime(r.best)}` : locked ? "LOCKED" : "NOT CLEARED", W - 56, y + 46);
-        if (!locked) { g.fillStyle = hov ? COL.amber : COL.dim; g.fillText(hov ? "JACK IN ▸" : `${r.tries} tries`, W - 56, y + 84); }
+        g.fillText(r.best !== null ? `BEST ${fmtTime(r.best)}` : locked ? "LOCKED" : "NOT CLEARED", W - 56, y + 40);
+        if (!locked) { g.fillStyle = hov ? COL.amber : COL.dim; g.fillText(hov ? "JACK IN ▸" : `${r.tries} tries`, W - 56, y + 76); }
         g.textAlign = "left";
       });
     });
@@ -2792,7 +3048,7 @@
     const g = p.g, W = p.c.width;
     frame(p, "records");
     LEVELS.forEach((L, i) => {
-      const r = lrec(L.id), y = 128 + i * 90;
+      const r = lrec(L.id), y = 120 + i * 80;
       g.fillStyle = i > rec.unlocked ? COL.dim : L.col; g.font = `32px ${FONT}`; g.fillText(`${L.num} ${L.name.toUpperCase()}`, 36, y);
       g.fillStyle = COL.ink; g.font = `24px ${FONT}`;
       g.fillText(`best ${r.best !== null ? fmtTime(r.best) : "—"}   haul ${r.data} GB   cleared ${r.clears}×   tries ${r.tries}`, 36, y + 38);
@@ -2845,6 +3101,7 @@
     if (renderer.xr.isPresenting) return;
     if (S.mode === "hub") { camera.position.set(0, 1.6, 1.8); camera.rotation.set(-0.06, 0, 0); }
     else if (S.mode === "run" && R && R.id === "polybius") { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.02, 0, 0); }
+    else if (S.mode === "run" && R && R.id === "uplink") { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.42, 0, 0); }
     else if (S.mode === "run" && R && R.id === "trap") { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); }
     else { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
   }
@@ -2903,7 +3160,7 @@
   $("vrBtn").addEventListener("click", async () => {
     Sound.start();
     try {
-      const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor"] });
+      const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor", "hand-tracking"] });
       renderer.xr.setReferenceSpaceType("local-floor");
       await renderer.xr.setSession(session);
     } catch (e) {
@@ -2926,10 +3183,11 @@
   applyStyle();
 
   // ===================================================================== main loop
-  let last = performance.now(), t = 0;
+  let last = performance.now(), t = 0, XRF = null;
   startSplash();
   renderer.setAnimationLoop(loop);
-  function loop(now) {
+  function loop(now, frame) {
+    XRF = frame;
     const dt = clamp((now - last) / 1000, 0, 0.05); last = now; t += dt;
     U.uTime.value = t;
     if (S.mode === "hub") {
@@ -2972,7 +3230,7 @@
         const c = camera.position;
         vrHud.m.position.set(c.x, c.y - 0.62, c.z - 1.35); vrHud.m.rotation.set(-0.43, 0, 0);
         vrMsg.m.position.set(c.x, c.y + 0.35, c.z - 3.2);
-        ctrls.forEach((q) => { q.userData.line.visible = S.mode === "run" && R && R.L.tapAim; q.userData.line.scale.z = 6; });
+        ctrls.forEach((q) => { q.userData.line.visible = S.mode === "run" && R && (R.L.tapAim || R.L.noShoot); q.userData.line.scale.z = 6; });
       }
     }
     if (msgTimer > 0) {
@@ -2989,7 +3247,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, threats, mines, btShips, powerUps, cubies, cubeRoot, applyMove, cubeSolved, renderer, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
