@@ -1247,6 +1247,97 @@
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), shader({ ...U }, `void main(){ float g = gridL(vWorld.xz / 2.0); vec3 col = vec3(0.06, 0.03, 0.01) + vec3(0.6, 0.3, 0.06) * g * 0.35; gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`));
     fl.rotation.x = -Math.PI / 2; fl.position.y = -0.2; uplink.add(fl);
   }
+  // ---- Long Distance (Johnny Mnemonic, 1:20-1:50): boot text, the blue zoom, the VR3 megacity, grab the globe,
+  // dial on the ENTRY CODE world map, zoom boxes onto the destination, then fly low through the amber city to the hacker's node
+  const LAND = [ // rough continents, [lon, lat]
+    [[-168, 66], [-162, 70], [-150, 71], [-128, 70], [-115, 73], [-95, 72], [-85, 68], [-80, 63], [-65, 60], [-56, 51], [-66, 45], [-75, 38], [-81, 31], [-80, 26], [-83, 29], [-90, 30], [-97, 27], [-97, 21], [-92, 18], [-88, 21], [-87, 16], [-83, 10], [-78, 8], [-86, 13], [-98, 16], [-105, 20], [-112, 30], [-117, 33], [-124, 40], [-125, 49], [-135, 57], [-147, 61], [-158, 57], [-165, 60]],
+    [[-55, 60], [-44, 60], [-40, 65], [-22, 70], [-20, 77], [-30, 83], [-55, 82], [-70, 79], [-60, 75], [-55, 70]],
+    [[-80, 9], [-63, 11], [-50, 1], [-35, -6], [-39, -14], [-41, -22], [-48, -26], [-53, -34], [-62, -41], [-66, -50], [-69, -55], [-74, -52], [-73, -37], [-70, -18], [-81, -6], [-78, 2]],
+    [[-10, 36], [-9, 43], [-1, 46], [-5, 48], [2, 51], [8, 54], [10, 57], [5, 59], [6, 62], [14, 68], [22, 71], [40, 68], [55, 70], [68, 73], [80, 73], [95, 77], [105, 78], [115, 73], [140, 72], [160, 70], [180, 68], [180, 65], [163, 60], [156, 51], [150, 59], [142, 59], [136, 55], [140, 48], [130, 42], [126, 35], [122, 37], [121, 31], [115, 22], [106, 17], [109, 12], [103, 11], [100, 13], [103, 1], [98, 8], [94, 17], [88, 22], [80, 15], [78, 8], [72, 22], [62, 25], [56, 24], [59, 22], [52, 16], [43, 13], [39, 21], [34, 31], [35, 36], [27, 37], [26, 40], [28, 43], [23, 40], [20, 40], [15, 38], [16, 41], [12, 44], [9, 44], [3, 43], [-1, 37]],
+    [[-17, 21], [-16, 28], [-6, 35], [10, 37], [11, 33], [20, 31], [32, 31], [39, 21], [43, 12], [51, 12], [41, -2], [40, -16], [35, -24], [27, -34], [20, -35], [15, -27], [12, -18], [13, -12], [9, -1], [5, 6], [-8, 4], [-13, 8], [-17, 13]],
+    [[114, -22], [115, -34], [124, -33], [135, -35], [140, -38], [146, -39], [150, -37], [153, -25], [146, -19], [142, -11], [136, -12], [129, -15], [122, -18]],
+    [[130, 31], [135, 34], [140, 35], [141, 41], [145, 43], [141, 40], [140, 35], [131, 33]], [[-5, 50], [1, 51], [-3, 56], [-6, 58], [-5, 55], [-4, 52]],
+    [[44, -25], [50, -15], [49, -12], [44, -17]], [[109, 1], [119, 6], [116, -4], [110, -3]], [[95, 5], [106, -6], [102, -4]], [[131, -1], [150, -10], [137, -5]], [[172, -34], [178, -38], [168, -46], [171, -42]],
+    [[-180, -72], [180, -72], [180, -90], [-180, -90]],
+  ];
+  const HACKER = [121, 31]; // where the call goes (no name: just the hacker's node)
+  function drawWorld(g, W, H, grid = true) {
+    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, "#0c1e78"); gr.addColorStop(1, "#1638a8"); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    if (grid) { g.strokeStyle = "rgba(120,170,255,0.22)"; g.lineWidth = 1; for (let x = 0; x <= W; x += W / 36) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); } for (let y = 0; y <= H; y += H / 18) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); } }
+    g.fillStyle = "#020408"; g.strokeStyle = "#9fdcff"; g.lineWidth = Math.max(1.5, W / 500); g.shadowColor = "#6ab8ff"; g.shadowBlur = W / 120;
+    for (const poly of LAND) { g.beginPath(); poly.forEach(([lo, la], i) => { const x = ((lo + 180) / 360) * W, y = ((90 - la) / 180) * H; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill(); g.stroke(); }
+    g.shadowBlur = 0;
+  }
+  const worldTex = (() => { const c = document.createElement("canvas"); c.width = 2048; c.height = 1024; drawWorld(c.getContext("2d"), 2048, 1024); return new THREE.CanvasTexture(c); })();
+  const ldGroup = new THREE.Group(); ldGroup.visible = false; runScene.add(ldGroup);
+  // the VR3 megacity: a canyon of dark blue towers with white lights, signs, and the white three-bladed cursor
+  const vr3 = new THREE.Group(); ldGroup.add(vr3);
+  {
+    const n = 220, im = new THREE.InstancedMesh(unitBox, towerMat, n), cols = [0x2a5acc, 0x1a3c9a, 0x3a7aff, 0x6a9aff].map((c) => new C3(c));
+    for (let i = 0; i < n; i++) { const a = rand(0, TAU), d = rand(22, 170), w = rand(3, 12), h = rand(20, 140); dummy.position.set(Math.sin(a) * d, rand(-120, 10) + h / 2 - 40, -Math.cos(a) * d - 20); dummy.rotation.set(0, rand(0, 1.5), 0); dummy.scale.set(w, h, w); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, cols[i % 4]); }
+    dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1); im.frustumCulled = false; vr3.add(im);
+    const lightM = new THREE.SpriteMaterial({ map: starTex((g) => { const r = g.createRadialGradient(128, 128, 0, 128, 128, 128); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.2, "rgba(170,210,255,0.6)"); r.addColorStop(1, "rgba(80,140,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 256, 256); }), blending: ADD, depthWrite: false, transparent: true, fog: false });
+    for (let i = 0; i < 60; i++) { const s2 = new THREE.Sprite(lightM); const a = rand(0, TAU), d = rand(15, 120); s2.position.set(Math.sin(a) * d, rand(-60, 30), -Math.cos(a) * d - 20); s2.scale.setScalar(rand(1, 5)); vr3.add(s2); }
+    const sign = (txt, col, w, h, font) => { const c = document.createElement("canvas"); c.width = 512; c.height = Math.round(512 * h / w); const g = c.getContext("2d"); g.fillStyle = "rgba(6,10,30,0.9)"; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = col; g.lineWidth = 8; g.strokeRect(8, 8, c.width - 16, c.height - 16); g.fillStyle = col; g.font = font; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, c.width / 2, c.height / 2 + 6); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), fog: false })); };
+    const s1 = sign("VR3", "#e8f0ff", 9, 4, `bold 190px 'Archivo Black', sans-serif`); s1.position.set(-24, 6, -40); s1.rotation.y = 0.5; vr3.add(s1);
+    const s2 = sign("網", "#ff3a4a", 3, 4, `bold 300px sans-serif`); s2.position.set(18, 14, -55); s2.rotation.y = -0.3; vr3.add(s2);
+    const s3 = sign("000", "#c8f060", 6, 2.4, `bold 170px 'Share Tech Mono', monospace`); s3.position.set(-30, 30, -70); s3.rotation.y = 0.4; vr3.add(s3);
+    const cursor = new THREE.Group(), bladeM = new THREE.MeshBasicMaterial({ color: 0xf2f6ff, fog: false });
+    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.6, 0.06), bladeM); b.position.set(Math.sin((k * TAU) / 3) * 0.3, Math.cos((k * TAU) / 3) * 0.3, 0); b.rotation.z = -(k * TAU) / 3; cursor.add(b); }
+    cursor.position.set(0, -1.4, -3.2); cursor.rotation.x = -0.9; vr3.add(cursor); vr3.userData.cursor = cursor;
+  }
+  // the globe you pull toward you, and the world map it unfolds into, with the ENTRY CODE pad and the zoom boxes
+  const ldGlobe = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), new THREE.MeshBasicMaterial({ map: worldTex, fog: false, transparent: true }));
+  ldGlobe.add(new THREE.Mesh(new THREE.SphereGeometry(1.06, 32, 16), new THREE.MeshBasicMaterial({ color: 0x4a8aff, transparent: true, opacity: 0.18, blending: ADD, depthWrite: false, fog: false })));
+  ldGroup.add(ldGlobe);
+  const ldMap = new THREE.Group(); ldGroup.add(ldMap);
+  const MAPW = 2, MAPH = 1;
+  const mapCv = document.createElement("canvas"); mapCv.width = 2048; mapCv.height = 1024; const mapTex = new THREE.CanvasTexture(mapCv);
+  const mapPlane = new THREE.Mesh(new THREE.PlaneGeometry(MAPW, MAPH), new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, fog: false })); ldMap.add(mapPlane);
+  const ldKeys = "123456789*0#".split("").map((k, i) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.03), new THREE.MeshBasicMaterial({ color: 0x1a3a9a, transparent: true, opacity: 0.9, fog: false }));
+    m.position.set(-MAPW / 2 + 0.16 + (i % 3) * 0.15, MAPH / 2 - 0.36 - Math.floor(i / 3) * 0.15, 0.02); m.userData.key = k; ldMap.add(m);
+    const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#e8f2ff"; g.font = "bold 44px 'Share Tech Mono', monospace"; g.textAlign = "center"; g.fillText(k, 32, 48);
+    const lab = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, fog: false, depthWrite: false })); lab.position.z = 0.017; m.add(lab);
+    return m;
+  });
+  const zoomBoxes = [0, 1, 2].map(() => { const l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([new V3(-0.5, -0.5, 0), new V3(0.5, -0.5, 0), new V3(0.5, 0.5, 0), new V3(-0.5, 0.5, 0)]), new THREE.LineBasicMaterial({ color: 0xffffff, fog: false, transparent: true })); l.visible = false; ldMap.add(l); return l; });
+  function drawMapPanel(dialled, number) { // the flat world, DIRECTORY, ENTRY CODE and what you've dialled so far
+    const g = mapCv.getContext("2d"); drawWorld(g, 2048, 1024);
+    g.fillStyle = "#ffffff"; g.font = "bold 54px 'Archivo Black', sans-serif"; g.textAlign = "left"; g.fillText("DIRECTORY", 60, 90);
+    g.font = "34px 'Share Tech Mono', monospace"; g.fillText("ENTRY CODE", 70, 170); g.font = "48px 'Share Tech Mono', monospace"; g.fillText((number.slice(0, dialled) + "_").replace(/(.{4})/g, "$1 "), 70, 236);
+    mapTex.needsUpdate = true;
+  }
+  // the amber city you fly through to the hacker's node, and the node itself: a golden pyramid under a red neon sign
+  const amberCity = new THREE.Group(); amberCity.visible = false; runScene.add(amberCity);
+  const AMBER_LEN = 620;
+  {
+    const n = 260, im = new THREE.InstancedMesh(unitBox, towerMat, n), cols = [0xff9a2a, 0xffb84a, 0xd86a18, 0xffcf7a].map((c) => new C3(c));
+    for (let i = 0; i < n; i++) { const side = Math.random() < 0.5 ? -1 : 1, w = rand(3, 9), h = Math.random() < 0.7 ? rand(1, 5) : rand(8, 36); dummy.position.set(side * rand(13, 60), h / 2, -rand(0, AMBER_LEN)); dummy.scale.set(w, h, rand(3, 12)); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, cols[i % 4]); }
+    for (let i = 0; i < 70; i++) { const w = rand(1.5, 5), h = rand(0.3, 1.6); dummy.position.set(rand(-11, 11), h / 2 - 0.5, -rand(20, AMBER_LEN - 40)); dummy.scale.set(w, h, rand(2, 8)); dummy.updateMatrix(); im.setMatrixAt((n - 70) + i, dummy.matrix); } // low data blocks under your flight
+    dummy.scale.setScalar(1); im.frustumCulled = false; amberCity.add(im);
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(240, AMBER_LEN + 200), shader({ ...U }, `void main(){ vec2 c = vWorld.xz; float g = gridL(c / 1.6), b = step(0.7, hash(floor(c / 3.2))) * 0.5;
+      vec3 col = vec3(0.12, 0.06, 0.01) + vec3(0.5, 0.28, 0.06) * (g * 0.5 + b * 0.25); gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0); }`));
+    fl.rotation.x = -Math.PI / 2; fl.position.set(0, -0.5, -AMBER_LEN / 2); amberCity.add(fl);
+    const lamp = new THREE.SpriteMaterial({ map: starTex((g) => { const r = g.createRadialGradient(128, 128, 0, 128, 128, 128); r.addColorStop(0, "rgba(255,220,140,1)"); r.addColorStop(0.3, "rgba(255,150,40,0.6)"); r.addColorStop(1, "rgba(255,120,20,0)"); g.fillStyle = r; g.fillRect(0, 0, 256, 256); }), blending: ADD, depthWrite: false, transparent: true });
+    for (let i = 0; i < 40; i++) { const s2 = new THREE.Sprite(lamp); s2.position.set((Math.random() < 0.5 ? -1 : 1) * rand(10, 40), rand(4, 20), -rand(0, AMBER_LEN)); s2.scale.setScalar(rand(3, 8)); amberCity.add(s2); }
+    const ledge = new THREE.MeshPhongMaterial({ color: 0xb02a10, emissive: 0x3a0800, flatShading: true });
+    for (let p = 0; p < 10; p++) { const x = (p % 2 ? -1 : 1) * rand(16, 30), z = -rand(40, AMBER_LEN - 60); for (let k = 0; k < 8; k++) { const l = new THREE.Mesh(new THREE.BoxGeometry(7 - k * 0.5, 0.5, 7 - k * 0.5), ledge); l.position.set(x, k * 4 + 2, z); amberCity.add(l); } }
+    // the node at the end: a golden pyramid with a red neon glyph over it, as the film arrives at ACCESS:
+    const tri = new THREE.Shape(); tri.moveTo(-9, 0); tri.lineTo(9, 0); tri.lineTo(0, 15.6); tri.closePath();
+    const node = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 4, bevelEnabled: false }), shader({ ...U, uGlow: { value: 0.1 } }, GOLD_FS)); node.position.set(0, 0, -AMBER_LEN - 4); amberCity.add(node);
+    const neon = (() => { const c = document.createElement("canvas"); c.width = 256; c.height = 256; const g = c.getContext("2d"); g.strokeStyle = "#ff3a3a"; g.shadowColor = "#ff2020"; g.shadowBlur = 20; g.lineWidth = 16; g.beginPath(); g.arc(128, 96, 54, Math.PI * 0.15, Math.PI * 0.85, true); g.moveTo(128, 40); g.lineTo(128, 150); g.moveTo(70, 150); g.lineTo(186, 150); g.moveTo(80, 210); g.lineTo(128, 160); g.lineTo(176, 210); g.stroke(); return new THREE.CanvasTexture(c); })();
+    const ns = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshBasicMaterial({ map: neon, transparent: true, depthWrite: false, fog: false })); ns.position.set(0, 21, -AMBER_LEN + 1); amberCity.add(ns);
+  }
+  const zoomTube = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 240, 32, 1, true), new THREE.ShaderMaterial({ // the blue rush
+    side: THREE.BackSide, transparent: true, depthWrite: false, uniforms: { uTime: U.uTime, uK: { value: 0 } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uTime; uniform float uK; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main(){ float lane = floor(vUv.x * 160.0), sp = 1.5 + h(vec2(lane, 2.0)) * 3.0; float d = smoothstep(0.6, 1.0, fract(vUv.y * (2.0 + h(vec2(lane, 5.0)) * 4.0) + uTime * sp));
+        float s = d * step(0.35, h(vec2(lane, 9.0))); vec3 col = vec3(0.05, 0.12, 0.45) + vec3(0.6, 0.8, 1.0) * s * 1.4; gl_FragColor = vec4(col, uK * (0.6 + s * 0.4)); }` }));
+  zoomTube.rotation.x = Math.PI / 2; zoomTube.visible = false; zoomTube.frustumCulled = false; zoomTube.renderOrder = 50; runScene.add(zoomTube);
+  const DTMF_OK = "0123456789";
   // ---- the security program: a giant head that assembles itself out of towers
   const BOSS_N = 96, BS = 1.7;
   const bossRoot = new THREE.Group(); bossRoot.visible = false; runScene.add(bossRoot);
@@ -2094,7 +2185,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); Sound.recHum(0); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); Sound.recHum(0); ldGroup.visible = amberCity.visible = zoomTube.visible = false; sky.visible = true; fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -2114,6 +2205,8 @@
     poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
     uplink: { fog: 0x1c0c03, dens: 0.03, a: 0xffa040, b: 0xd06010, world: false },
     battle: { fog: 0x3a1a08, dens: 0.0085, a: 0x2f8f4a, b: 0x9fff9a, world: false },
+    ld: { fog: 0x02040e, dens: 0.004, a: 0x35e6ff, b: 0x7a5cff, world: false },
+    amber: { fog: 0x1c0c03, dens: 0.011, a: 0xffa040, b: 0xd06010, world: false },
     gauntlet: { fog: 0x030806, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
   };
   function setEnv(name) {
@@ -3220,11 +3313,104 @@
       },
     },
     { // ---------------------------------------------------------------- 06
-      id: "uplink", num: "06", name: "Open the Line", col: COL.amber, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
-      blurb: "The golden pyramid. Take the missing pieces with your hands, turn them, set them in place.",
-      brief: "The core runs on military crypto you can't break alone. The lock on the way out is a golden pyramid with pieces missing. Take each floating piece, turn it to fit, and set it in its slot to open a long-distance modem line out of the enemy net, before the trace lands.",
+      id: "beijing", num: "06", name: "Long Distance", col: COL.heal, music: "beijing", number: "19950526", ownIntro: true,
+      get noShoot() { return !R || R.stage !== "fly"; },
+      blurb: "Johnny's call: pull up the world, dial your hacker's node, fly the amber city to it.",
+      brief: "Long distance. Into the open net: pull the globe to you, dial your hacker contact's node on the ENTRY CODE pad, then fly low across the amber data city to reach it before the trace finds you. They hold the backdoor you need.",
       init() {
-        setEnv("uplink"); uplink.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
+        setEnv("ld"); rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
+        Object.assign(R, { stage: "boot", st: 0, trace: 100, dialled: 0, grabs: new Map(), prevPress: {}, placed: false, nPk: -60, nIce: -120 });
+        ldGroup.visible = true; vr3.visible = ldGlobe.visible = ldMap.visible = false; zoomTube.visible = false; amberCity.visible = false;
+        ldMap.scale.setScalar(0.001); zoomBoxes.forEach((b) => (b.visible = false)); drawMapPanel(0, this.number);
+        if (handDots.parent !== runScene) runScene.add(handDots); handDots.material.color.set(0xffffff); // Johnny's gloves: white lights on the fingers
+        sky.visible = false; // the boot screen is pure black
+        Sound.blip(1);
+      },
+      objective() {
+        const n = this.number, shown = `${n.slice(0, 4)} ${n.slice(4)}`;
+        if (R.stage === "boot" || R.stage === "zoom") return { label: "Long distance", text: "Jacking into the open net…", prog: 0.05 };
+        if (R.stage === "city" || R.stage === "unfold") return { label: `Trace ${Math.ceil(R.trace)}%`, text: renderer.xr.isPresenting ? "Reach out and grab the globe" : "Click the globe to pull up the world", prog: 0.1 };
+        if (R.stage === "dial") return { label: `Trace ${Math.ceil(R.trace)}% · dialled ${R.dialled}/${n.length}`, text: `ENTRY CODE: dial ${shown} · next ${n[R.dialled]}`, prog: 0.15 + (0.35 * R.dialled) / n.length };
+        if (R.stage === "zoom2") return { label: "Connecting", text: "Routing to the hacker's node…", prog: 0.5 };
+        return { label: "Long distance", text: `Fly to the hacker's node · ${Math.max(0, Math.round(A.z + AMBER_LEN))} m`, prog: 0.5 + 0.5 * clamp(-A.z / AMBER_LEN, 0, 1) };
+      },
+      onRespawn() { R.trace = 100; for (const p of ice) if (p.on && p.z < A.z && p.z > A.z - 90) p.on = false; },
+      place(xr) { // the globe and the map: at arm's length in the headset, further off on a screen
+        const h = camera.position.clone();
+        if (xr) { ldGlobe.position.set(h.x, h.y - 0.15, h.z - 0.55).applyMatrix4(rig.matrixWorld); ldGlobe.scale.setScalar(0.16); ldMap.position.set(h.x, h.y - 0.08, h.z - 0.72).applyMatrix4(rig.matrixWorld); ldMap.userData.s = 0.55; }
+        else { ldGlobe.position.set(0, 1.45, -1.5); ldGlobe.scale.setScalar(0.38); ldMap.position.set(0, 1.5, -1.75); ldMap.userData.s = 1; }
+        vr3.position.set(0, 0, 0);
+      },
+      presses() { // edges of a pinch / trigger / click, with what they hit
+        const out = [], ptrs = UPLINK.pointers.call(this);
+        for (const P of ptrs) { const was = R.prevPress[P.id]; R.prevPress[P.id] = P.pressed; if (P.pressed && !was) out.push(P); }
+        return out;
+      },
+      update(dt, t) {
+        const xr = renderer.xr.isPresenting, live = alive(); R.st += dt;
+        if (R.stage !== "fly") {
+          R.speed = 0; construct.root.visible = false; updateTrails(false);
+          if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.04, 0, 0); }
+          if (!R.placed) { R.placed = true; this.place(xr); }
+        }
+        if (R.stage === "boot") { // INTERNET LOCAL TIME, and a barcode
+          const now = new Date(), hh = ((now.getHours() + 11) % 12) + 1, ts = `${hh}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())} ${now.getHours() < 12 ? "AM" : "PM"}`;
+          overlay(true, `b${ts}`, (g, W, H, low, x2) => { g.clearRect(0, 0, W, H); const fs = Math.round(H * 0.035), x0 = W * (x2 ? 0.24 : 0.05); g.fillStyle = "#ffffff"; g.font = `bold ${fs}px 'Archivo Black', sans-serif`; g.textAlign = "left"; g.fillText(`INTERNET LOCAL TIME:  ${ts}`, x0, H * (x2 ? 0.3 : 0.12)); const bx = W * (x2 ? 0.66 : 0.78), by = H * (x2 ? 0.66 : 0.78); for (let i = 0, x = bx; i < 34; i++) { const w = [2, 3, 5][(i * 7) % 3]; if (i % 2 === 0) g.fillRect(x, by, w, H * 0.07); x += w + 2; } });
+          if (R.st > 2.6) { R.stage = "zoom"; R.st = 0; zoomTube.visible = true; sky.visible = true; Sound.whoosh(); overlay(false); }
+        } else if (R.stage === "zoom") { // the blue rush
+          zoomTube.position.copy(camera.position).applyMatrix4(rig.matrixWorld); zoomTube.material.uniforms.uK.value = Math.min(1, R.st * 1.5);
+          if (R.st > 2.2) { R.stage = "city"; R.st = 0; zoomTube.visible = false; vr3.visible = ldGlobe.visible = true; Sound.whoosh(); showMsg("VR3", xr ? "reach out and grab the globe" : "click the globe", COL.cyan, 3); }
+        } else if (R.stage === "city" || R.stage === "unfold" || R.stage === "dial" || R.stage === "zoom2") {
+          if (R.stage !== "zoom2" && live) { R.trace -= dt * 0.8; if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
+          vr3.userData.cursor.rotation.z += dt * 0.8; ldGlobe.rotation.y += dt * 0.25;
+          const presses = live ? this.presses() : [];
+          if (R.stage === "city") {
+            for (const P of presses) {
+              const hit = P.hand ? P.point.distanceTo(ldGlobe.position) < ldGlobe.scale.x * 1.5 : P.ray.intersectObject(ldGlobe, false).length > 0;
+              if (hit) { R.stage = "unfold"; R.st = 0; Sound.chime(); break; }
+            }
+          } else if (R.stage === "unfold") { // the globe pulls in and opens out flat
+            const k = smooth01(R.st / 1.1); ldGlobe.scale.setScalar((xr ? 0.16 : 0.38) * (1 - k) + 0.001); ldMap.visible = true; ldMap.scale.setScalar(Math.max(0.001, ldMap.userData.s * k));
+            if (R.st > 1.1) { R.stage = "dial"; R.st = 0; ldGlobe.visible = false; showMsg("ENTRY CODE", `dial ${this.number.slice(0, 4)} ${this.number.slice(4)}`, COL.cyan, 3); }
+          } else if (R.stage === "dial") {
+            for (const P of presses) {
+              let key = null;
+              if (P.hand) { let bd = 0.06 * ldMap.userData.s; for (const m of ldKeys) { const d = P.point.distanceTo(m.getWorldPosition(btV)); if (d < bd) { bd = d; key = m; } } }
+              else { const h = P.ray.intersectObjects(ldKeys, false)[0]; if (h) key = h.object; }
+              if (!key) continue;
+              const k = key.userData.key; key.userData.flash = 1;
+              if (k === this.number[R.dialled]) { if (DTMF_OK.includes(k)) Sound.dtmf(k); R.dialled++; drawMapPanel(R.dialled, this.number); }
+              else { Sound.buzz(); Sound.say("denied"); R.trace = Math.max(0, R.trace - 6); key.userData.bad = 1; }
+              if (R.dialled >= this.number.length) { R.stage = "zoom2"; R.st = 0; Sound.ringback(); Sound.say("granted"); break; }
+            }
+            for (const m of ldKeys) { m.userData.flash = Math.max(0, (m.userData.flash || 0) - dt * 3); m.userData.bad = Math.max(0, (m.userData.bad || 0) - dt * 2); m.material.color.setRGB(0.1 + m.userData.flash * 0.9 + m.userData.bad * 0.8, 0.23 + m.userData.flash * 0.6, 0.6 + m.userData.flash * 0.4 - m.userData.bad * 0.5); if (m.userData.key === this.number[R.dialled]) m.material.color.lerp(new C3(0xffc24a), 0.35 + 0.25 * Math.sin(t * 6)); }
+          } else if (R.stage === "zoom2") { // white boxes close in on the hacker's node, then you dive in
+            const hx = ((HACKER[0] + 180) / 360 - 0.5) * MAPW, hy = (0.5 - (90 - HACKER[1]) / 180) * MAPH;
+            zoomBoxes.forEach((b, i) => { const k = clamp(R.st / 1.6 - i * 0.15, 0, 1), w = lerp(MAPW * 0.9, 0.08, smooth01(k)), h = lerp(MAPH * 0.9, 0.06, smooth01(k)); b.visible = k > 0 && k < 1; b.position.set(lerp(0, hx, smooth01(k)), lerp(0, hy, smooth01(k)), 0.03); b.scale.set(w, h, 1); });
+            if (R.st > 1.8) { const k2 = smooth01((R.st - 1.8) / 0.8); ldMap.scale.setScalar(ldMap.userData.s * (1 + k2 * 6)); ldMap.position.x -= hx * ldMap.userData.s * k2 * dt * 6; }
+            if (R.st > 2.7) this.startFlight();
+          }
+        } else if (R.stage === "fly") {
+          flightMove(dt, 24, false); flightView(dt, t, false);
+          const H = A.z - 240;
+          while (R.nPk > H && R.nPk > -AMBER_LEN + 40) { spawnPattern(R.nPk, 0.12); R.nPk -= rand(40, 60); }
+          while (R.nIce > H && R.nIce > -AMBER_LEN + 60) { spawnIce(R.nIce, Math.random() < 0.45 ? 1 : 0); R.nIce -= rand(35, 60); }
+          updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 5 });
+          if (live && A.z < -AMBER_LEN + 12 && !R.over) { Sound.connected(); Sound.say("granted"); burst(A.x, A.y, A.z, C_DATA, 90); levelComplete("NODE REACHED", "the hacker's lock is ahead"); }
+        }
+      },
+      startFlight() {
+        R.stage = "fly"; R.st = 0; ldGroup.visible = false; amberCity.visible = true; setEnv("amber");
+        A.x = 0; A.y = 5; A.z = 0; A.vx = A.vy = 0; prev.set(0, 5, 0); rig.position.set(0, 3.45, 4.6); R.eyeCal = null;
+        showMsg("THE AMBER CITY", "fly to the hacker's node · traces are hunting you", COL.amber, 3); Sound.whoosh();
+      },
+    },
+    { // ---------------------------------------------------------------- 06
+      id: "uplink", num: "07", name: "Open the Line", col: COL.amber, music: "uplink", static: true, noGod: true, noShoot: true, ownIntro: true,
+      blurb: "The hacker's node is sealed by a golden pyramid. Fit the missing pieces to open the line.",
+      brief: "You've reached the hacker's node, and it's sealed: ACCESS through a golden pyramid with pieces missing. Take each floating piece, turn it to fit and set it in its slot. Open the line and the hacker hands you the backdoor to the core, before the trace lands.",
+      init() {
+        setEnv("uplink"); uplink.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0; if (handDots.parent !== uplink) uplink.add(handDots);
         Object.assign(R, { stage: "solve", round: 0, trace: 100, idle: 0, hintT: 0, grabs: new Map(), placed: false, nextT: 0, hintPiece: null });
         pyrRoot.position.set(0, 1.45, -1.25); pyrRoot.rotation.set(-0.06, 0, 0); // on a screen; in the headset it moves to arm's reach
         this.deal(2);
@@ -3303,7 +3489,7 @@
         if (xr && !R.placed) { R.placed = true; const h = camera.position; pyrRoot.position.set(h.x, h.y - 0.28, h.z - 0.5).applyMatrix4(rig.matrixWorld); }
         if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(-0.12, 0, 0); }
         if (R.stage === "solve" && live) { R.trace -= dt * (R.round ? 0.7 : 0.55); if (R.trace <= 0) { R.trace = 0; killNow("shatter"); } }
-        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.deal(pieces.length); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `cracked in ${fmtTime(R.time)} · now make the call`); } } }
+        if (R.stage === "next" || R.stage === "ring") { R.nextT -= dt; if (R.nextT <= 0) { if (R.stage === "next") { R.stage = "solve"; R.trace = Math.max(R.trace, 70); this.deal(pieces.length); } else if (!R.over) { Sound.connected(); levelComplete("LINE OPEN", `the hacker hands you the backdoor · on to the core`); } } }
         // input: grab a floating piece, carry it, turn it, let go
         const ptrs = this.pointers(), seen = new Set();
         for (const Pt of ptrs) {
@@ -3337,99 +3523,6 @@
           P.outline.visible = hinted; if (hinted) P.outline.material.opacity = 0.5 + 0.5 * Math.sin(t * 6);
         }
       },
-    },
-    { // ---------------------------------------------------------------- 06
-      id: "beijing", num: "07", name: "Long Distance", col: COL.heal, music: "beijing", number: "080019950526",
-      blurb: "Fly the trunk line and dial your hacker contact, digit by digit, before the trace finds you.",
-      brief: "Long distance. Fly the trunk line through cyberspace and dial your hacker contact, one digit gate at a time, before the trace finds you. They have the self-destruct backdoor.",
-      init() {
-        setEnv("tunnel"); R.zT0 = A.z - 10; tunnelMat.uniforms.uT0.value = R.zT0; R.rx = A.x; R.ry = A.y - 6;
-        R.digit = 0; R.signal = 100; R.nGate = A.z - 230; R.nPk = A.z - 80; R.nIce = A.z - 150; R.nBar = A.z - 320; R.stage = "dial";
-        showMsg("LONG DISTANCE", "dial 0800 1995 0526", COL.heal, 3);
-      },
-      objective() {
-        const n = this.number, shown = `${n.slice(0, 4)} ${n.slice(4, 8)} ${n.slice(8)}`;
-        if (R.stage === "dial") {
-          const next = n[R.digit];
-          return { label: `Signal ${Math.ceil(R.signal)}% · dialled ${R.digit}/${n.length}`, text: `Next digit: ${next}   (${shown})`, prog: R.digit / n.length };
-        }
-        return { label: "Ringing", text: "Reach the hacker's node", prog: 1 - clamp((A.z - R.zEnd) / 360, 0, 1) };
-      },
-      onRespawn() { R.signal = 100; for (const p of ice) if (p.on && p.z < A.z && p.z > A.z - 90) p.on = false; },
-      update(dt, t) {
-        const n = this.number;
-        flightMove(dt, 27, true); flightView(dt, t, true);
-        overlay(R.stage === "dial" && alive() && !R.over, `k${R.digit}`, (g, W, H, low, xr) => drawKeypad(g, W, H, low, n, R.digit, xr)); // the ENTRY CODE pad
-        tunnel.position.z = A.z - 220;
-        const H = A.z - 260;
-        if (R.stage === "dial") {
-          while (R.nGate > H) { this.spawnGate(R.nGate); R.nGate -= 210; }
-          if (alive() && !R.demo) { R.signal -= dt * 2.4; if (R.signal <= 0) { R.signal = 0; showMsg("CALL DROPPED", "signal lost", COL.alarm, 1.5); R.integrity = 0; loseLife("drop"); } }
-        }
-        while (R.nPk > H) {
-          const z = R.nPk, c = path(R.zT0 - z), base = rand(0, TAU), type = Math.random() < 0.5 ? 2 : 0;
-          if (!gates.some((g) => g.on && Math.abs(g.z - z) < 30)) for (let i = 0; i < 8; i++) { const a = base + i * 0.55; const cc = path(R.zT0 - (z - i * 3)); spawnPacket(cc.x + Math.cos(a) * 3.8, cc.y + Math.sin(a) * 3.8, z - i * 3, type, true); }
-          if (Math.random() < 0.12) spawnPacket(c.x, c.y, z - 30, 1, true);
-          R.nPk -= rand(55, 75);
-        }
-        while (R.nIce > H) {
-          const z = R.nIce, c = path(R.zT0 - z), a = rand(0, TAU), r = rand(0, 4);
-          if (!gates.some((g) => g.on && Math.abs(g.z - z) < 20)) spawnIce(z, Math.random() < 0.35 ? 1 : 0, c.x + Math.cos(a) * r, c.y + Math.sin(a) * r, 0.8, 0.8);
-          R.nIce -= rand(35, 60);
-        }
-        while (R.nBar > H) { if (R.stage === "dial" && !gates.some((g) => g.on && Math.abs(g.z - R.nBar) < 40)) this.spawnBar(R.nBar); R.nBar -= rand(260, 380); }
-        // gates: the k-th unpassed gate ahead always offers digit R.digit + k
-        gates.filter((g) => g.on && !g.passed).sort((a, b) => b.z - a.z).forEach((g, k) => { if (g.forDigit !== R.digit + k) this.assignGate(g, R.digit + k); });
-        for (const g of gates) {
-          if (!g.on) continue;
-          const c = path(R.zT0 - g.z); g.g.position.set(c.x, c.y, g.z);
-          g.rings.forEach((r, i) => { r.tor.rotation.z += dt * (i + 1) * 0.6; r.num.lookAt(camera.getWorldPosition(tmpV)); });
-          if (g.z > rig.position.z + 8) { g.on = false; g.g.visible = false; continue; }
-          if (!g.passed && prev.z > g.z && A.z <= g.z && alive()) {
-            g.passed = true;
-            let hitR = null; for (const r of g.rings) { const dx = A.x - (c.x + r.r.position.x), dy = A.y - (c.y + r.r.position.y); if (dx * dx + dy * dy < 1.95 * 1.95) hitR = r; }
-            if (R.stage !== "dial") continue;
-            if (!hitR) { R.signal = Math.max(0, R.signal - 12); showMsg("MISSED THE GATE", `still need ${n[R.digit]}`, COL.mag, 1.2); Sound.buzz(); }
-            else if (hitR.digit === +n[R.digit]) {
-              Sound.dtmf(hitR.digit); R.digit++; R.data += 5; R.god = Math.min(100, R.god + 6); R.signal = Math.min(100, R.signal + 8);
-              burst(A.x, A.y, A.z, C_HEAL, 30, R.speed * 0.6);
-              if (R.digit >= n.length) {
-                R.stage = "ring"; R.zEnd = A.z - 360; const e = path(R.zT0 - R.zEnd); beijingPort.position.set(e.x, e.y, R.zEnd); beijingPort.visible = true;
-                Sound.ringback(); showMsg("RINGING…", "the hacker's node is ahead", COL.heal, 3);
-              } else showMsg(`DIALLED ${hitR.digit}`, `next: ${n[R.digit]}`, COL.heal, 1);
-            } else { Sound.dtmf(hitR.digit); Sound.buzz(); showMsg("WRONG NUMBER", `you dialled ${hitR.digit}; you need ${n[R.digit]}`, COL.alarm, 1.4); damage(15, "WRONG NUMBER", A.x, A.y, A.z); }
-          }
-        }
-        // rotating data bars
-        for (const b of bars) {
-          if (!b.on) continue;
-          b.a += b.w * dt; const c = path(R.zT0 - b.z); b.m.position.set(c.x, c.y, b.z); b.m.rotation.z = b.a;
-          if (b.z > rig.position.z + 8) { b.on = false; b.m.visible = false; continue; }
-          if (!b.passed && prev.z > b.z && A.z <= b.z && alive()) {
-            b.passed = true; const rx = A.x - c.x, ry = A.y - c.y;
-            if (Math.abs(-Math.sin(b.a) * rx + Math.cos(b.a) * ry) < 0.95) damage(25, "DATA BAR", A.x, A.y, A.z);
-          }
-        }
-        if (R.stage === "ring") {
-          beijingPort.rotation.z += dt * 0.5;
-          const k = clamp(1 - (A.z - R.zEnd) / 150, 0, 1); if (alive()) { R.rx = lerp(R.rx, 0, dt * k * 3); R.ry = lerp(R.ry, 0, dt * k * 3); }
-          if (alive() && prev.z > R.zEnd && A.z <= R.zEnd) { beijingPort.visible = false; Sound.connected(); Sound.say("granted"); burst(A.x, A.y, A.z, C_RED, 90); levelComplete("CONNECTED", "the hacker picks up · the backdoor is yours"); }
-        }
-        updatePackets(dt, t, R.godT > 0); updateIce(dt, t, { hunt: 5.5 });
-      },
-      spawnGate(z) {
-        const g = gates.find((g) => !g.on); if (!g) return;
-        g.on = true; g.passed = false; g.z = z; g.g.visible = true; g.forDigit = -1;
-      },
-      assignGate(g, idx) {
-        g.forDigit = idx;
-        const need = +this.number[Math.min(idx, this.number.length - 1)], right = (Math.random() * 3) | 0;
-        g.rings.forEach((r, i) => {
-          let d = need; if (i !== right) do { d = (Math.random() * 10) | 0; } while (d === need || g.rings.slice(0, i).some((q) => q.digit === d));
-          r.digit = d; r.num.material.map = digitTex[d]; r.num.material.needsUpdate = true;
-        });
-      },
-      spawnBar(z) { const b = bars.find((b) => !b.on); if (!b) return; Object.assign(b, { on: true, z, a: rand(0, Math.PI), w: (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 1.1), passed: false }); b.m.visible = true; },
     },
     { // ---------------------------------------------------------------- 07
       id: "trap", num: "08", name: "Firewall Trap", col: COL.alarm, music: "trap", noGod: true, static: true, tapAim: true, aimDist: 9,
@@ -3649,7 +3742,7 @@
     },
   ];
   // chapters 2 (the bunker) and 10 (the escape) reuse the battlefield's world and rules
-  const BATTLE = LEVELS[0];
+  const BATTLE = LEVELS[0], UPLINK = LEVELS.find((L) => L.id === "uplink");
   const BUNKER = Object.assign(Object.create(BATTLE), {
     id: "bunker", num: "02", name: "The Bunker", col: COL.cyan, music: "bunker", ownIntro: true,
     blurb: "Inside the uplink bunker. Fight to the mainframe room and jack in. Jump the tripwires.",
@@ -3997,7 +4090,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, dodecs, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, dodecs, ldGlobe, ldKeys, ldMap, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
