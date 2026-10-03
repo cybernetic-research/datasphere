@@ -24,5 +24,5 @@ V
 for pair in "threat:threat" "friendly:friendly" "keyfound:access key found" "granted:access granted" "denied:access denied" "danger:danger"; do
   k=${pair%%:*}; txt=${pair#*:}
   espeak-ng --path="$OUT/data" -v en-us+datasphere -s 125 -a 90 -g 4 -w "$OUT/raw_$k.wav" "$txt"
-  ffmpeg -loglevel error -y -i "$OUT/raw_$k.wav" -af "highpass=f=140,lowpass=f=5200,aecho=0.8:0.55:70|140:0.22|0.12,volume=1.2" -ac 1 -ar 22050 -b:a 40k "$OUT/$k.mp3"
+  ffmpeg -loglevel error -y -i "$OUT/raw_$k.wav" -af "highpass=f=140,lowpass=f=5200,aecho=0.8:0.5:70|140:0.2|0.1,loudnorm=I=-11:TP=-1:LRA=7,alimiter=limit=0.95" -ac 1 -ar 22050 -b:a 48k "$OUT/$k.mp3"
 done
