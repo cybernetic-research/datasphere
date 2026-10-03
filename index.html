@@ -1171,10 +1171,15 @@
   }
   const uplinkBeam = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new V3(), new V3()]), new THREE.LineBasicMaterial({ color: 0x35e6ff, fog: false, transparent: true })); uplinkBeam.frustumCulled = false; battle.add(uplinkBeam);
   const laserBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xff3a3a, fog: false, transparent: true, blending: ADD, depthWrite: false })); laserBeam.visible = false; battle.add(laserBeam);
-  const blasts = [0, 1, 2, 3].map(() => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffb04a, fog: false, transparent: true, blending: ADD, depthWrite: false })); m.visible = false; battle.add(m); return { m, t: 0, on: false, max: 1, dur: 1 }; });
+  const blasts = Array.from({ length: 12 }, () => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffb04a, fog: false, transparent: true, blending: ADD, depthWrite: false })); m.visible = false; battle.add(m); return { m, t: 0, on: false, max: 1, dur: 1 }; });
   const debris = Array.from({ length: 28 }, () => { const m = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 6), SLM.fill.clone()); m.material.color.set(0xff8a1f); m.visible = false; battle.add(m); return { m, v: new V3(), w: new V3(), t: 0 }; });
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(9, 14, 70, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7a1f, fog: false, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); pillar.visible = false; battle.add(pillar);
   const shock = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 72), new THREE.MeshBasicMaterial({ color: 0xffa040, fog: false, transparent: true, blending: ADD, depthWrite: false, side: THREE.DoubleSide })); shock.rotation.x = -Math.PI / 2; shock.visible = false; battle.add(shock);
+  // the bunker's own end: chunks of the ziggurat thrown across the field, a fireball, and a mushroom cloud of fire and smoke
+  const bChunks = Array.from({ length: 44 }, (_, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(rand(1.5, 5), rand(1.2, 3.5), rand(1.5, 5)), i % 3 ? zigMat : bunkerWallMat); m.visible = false; battle.add(m); return { m, v: new V3(), w: new V3(), t: 0 }; });
+  const cloudCap = new THREE.Mesh(new THREE.TorusGeometry(1, 0.6, 12, 28), new THREE.MeshBasicMaterial({ color: 0xff7a1f, fog: false, transparent: true, blending: ADD, depthWrite: false })); cloudCap.rotation.x = -Math.PI / 2; cloudCap.visible = false; battle.add(cloudCap);
+  const smokes = Array.from({ length: 16 }, () => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x2a140a, transparent: true, depthWrite: false, fog: false })); m.visible = false; battle.add(m); return { m, v: new V3(), t: 0, life: 1, s0: 1, s1: 1 }; });
+  const dish0 = { p: dish.position.clone(), q: dish.quaternion.clone() };
   const homeBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 60, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x5dffb0, fog: false, transparent: true, opacity: 0.5, blending: ADD, depthWrite: false })); homeBeam.visible = false; battle.add(homeBeam);
   function blast(p, max, dur, col) { const b = blasts.find((q) => !q.on) || blasts[0]; Object.assign(b, { on: true, t: 0, max, dur }); b.m.position.copy(p); b.m.material.color.set(col); b.m.visible = true; }
   // the odd Space Paranoid crossing overhead, dropping bombs; a ring marks where each one will land
@@ -1825,6 +1830,12 @@
         tone("sine", 58, t, 0.6 * k * s, 1.2 + s, false, 18);
         for (let i = 0; i < 6 * s; i++) noiseHit(t + 0.15 + Math.random() * 1.1, 0.07 * k, 0.05, "bandpass", rand(1200, 4200), 0, 4); // debris pattering down
       },
+      mega() { // the bunker: a white crack, a long roll of thunder, secondaries, and wreckage raining for seconds
+        if (!ctx) return; const t = ctx.currentTime + 0.05;
+        noiseHit(t, 0.9, 0.25, "highpass", 900); noiseHit(t, 1, 6.5, "lowpass", 2600, 30); tone("sine", 48, t, 0.9, 6, false, 14); tone("sawtooth", 70, t, 0.22, 3.5, false, 20);
+        for (let i = 0, u = t + 0.35; i < 10; i++, u += rand(0.25, 0.6)) { noiseHit(u, rand(0.3, 0.6), rand(1.2, 2.4), "lowpass", rand(500, 1400), 40); tone("sine", rand(40, 70), u, 0.35, 1.5, false, 20); }
+        for (let i = 0; i < 50; i++) noiseHit(t + 1 + Math.random() * 7, rand(0.03, 0.08), 0.05, "bandpass", rand(900, 4000), 0, 4);
+      },
       rumble(k) { if (ctx) rumbleG.gain.setTargetAtTime(0.9 * k, ctx.currentTime, 0.4); },
       whiz() { if (!ctx) return; const t = ctx.currentTime; noiseHit(t, 0.16, 0.16, "bandpass", 3600, 900, 6); },
       laser() { if (!ctx) return; tone("square", 1400, ctx.currentTime, 0.035, 0.09, false, 320); },
@@ -2222,7 +2233,7 @@
   const addT = (x, y, z, r, mov, hit) => targets.push({ x, y, z, r, mov, hit });
   const alive = () => R && !R.over && R.derezT <= 0;
   const posing = () => R && R.derezT <= 0 && R.over !== "failed";
-  const vulnerable = () => alive() && !R.demo && R.inv <= 0 && R.godT <= 0;
+  const vulnerable = () => alive() && !R.demo && !R.cine && R.inv <= 0 && R.godT <= 0;
   const RED_FOG = new C3(0x3a0008);
   // first person: flight levels only, and the camera pulls back to third person while you die
   // in the headset you're always first person, even while dying; on a screen the view option applies (third person by default)
@@ -2256,7 +2267,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); Sound.recHum(0); Sound.rumble(0); ldGroup.visible = amberCity.visible = zoomTube.visible = false; sky.visible = true; sysopGroup.visible = false; if (pcGloves) pcGloves.forEach((g) => (g.visible = false)); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); $("hud").style.visibility = ""; Sound.recHum(0); Sound.rumble(0); ldGroup.visible = amberCity.visible = zoomTube.visible = false; sky.visible = true; sysopGroup.visible = false; if (pcGloves) pcGloves.forEach((g) => (g.visible = false)); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -2541,7 +2552,7 @@
   }
   function shootStep(dt) {
     reticles.forEach((r) => (r.visible = false));
-    if (!R || R.demo || R.L.lane || R.L.noShoot) return;
+    if (!R || R.demo || R.L.lane || R.L.noShoot || R.cine) return;
     const live = alive();
     const camW = tmpV2.setFromMatrixPosition(camera.matrixWorld);
     for (const a of IN.aims) {
@@ -2784,6 +2795,8 @@
         bunker.visible = spaceLaser.visible = uplinkBeam.visible = true; pillar.visible = homeBeam.visible = laserBeam.visible = shock.visible = false;
         blasts.forEach((b) => { b.on = false; b.m.visible = false; }); debris.forEach((d) => { d.t = 0; d.m.visible = false; });
         tripwires.forEach((w) => { w.tripped = false; w.beam.visible = true; }); R.fogBase0 = R.fogBase.clone();
+        bChunks.forEach((q) => { q.t = 0; q.m.visible = false; }); smokes.forEach((q) => { q.t = 0; q.m.visible = false; }); cloudCap.visible = false; R.cine = null; $("hud").style.visibility = "";
+        if (dish.parent !== bunker) bunker.add(dish); dish.position.copy(dish0.p); dish.quaternion.copy(dish0.q); dish.userData.t = 0;
         BT.trenches.slice(1).forEach((tz) => spawnPacket(rand(-6, 6), -1, tz, 1, true));
         rig.position.set(A.x, A.y - 0.2, A.z + 4.4);
         showMsg("SIMIAN BATTLEFIELD", renderer.xr.isPresenting ? "left stick moves · A jumps mines and wire · trigger fires · stand still in a trench to peek" : "WASD moves · Space jumps mines and wire · click fires · stand still in a trench to peek", COL.heal, 4);
@@ -2824,21 +2837,38 @@
       },
       blowBunker() { // and the bunker goes up behind you
         BDOOR.gone = true; bunker.visible = jackPort.visible = uplinkBeam.visible = false; Sound.alarm(false);
-        const c = new V3(0, 3, BT.bz - (BROWS * BC) / 2);
-        for (let k = 0; k < 10; k++) burst(c.x + rand(-18, 18), rand(1, 9), c.z + rand(-26, 26), k % 2 ? C_RED : C_ORANGE, 60);
-        shatterCube(c.x, 4, c.z, C_HEAL, 40); blast(c, 50, 2.6, 0xffb04a); pillar.position.set(c.x, 35, c.z); pillar.userData.t = 0; pillar.scale.setScalar(1); pillar.visible = true;
-        Sound.blast(1, Math.hypot(A.x - c.x, A.z - c.z)); Sound.blast(1, Math.hypot(A.x - c.x, A.z - c.z) + 60); pulse(1, 500); R.flash = Math.max(R.flash, 0.8);
+        const c = new V3(0, 3, BT.bz - (BROWS * BC) / 2), D = BROWS * BC;
+        // a white core, then the fireball rolling up out of it
+        blast(c.clone().setY(8), 70, 1.2, 0xffffff); blast(c.clone().setY(12), 130, 3.5, 0xffb04a); blast(c.clone().setY(30), 90, 4.5, 0xff5a1a); blast(c.clone().setY(18), 60, 2.4, 0xfff0c0);
+        for (let k = 0; k < 18; k++) burst(c.x + rand(-22, 22), rand(1, 14), c.z + rand(-30, 30), k % 3 ? C_ORANGE : C_RED, 70);
+        shatterCube(c.x, 4, c.z, C_HEAL, 60); pillar.position.set(c.x, 35, c.z); pillar.userData.t = 0; pillar.scale.setScalar(1); pillar.visible = true;
+        cloudCap.visible = true; cloudCap.userData.t = 0; cloudCap.position.set(c.x, 18, c.z);
+        bChunks.forEach((q) => { // the ziggurat comes apart
+          const P = q.m.position.set(c.x + rand(-19, 19), rand(1, 13), c.z + rand(-D / 2, D / 2)), o = tmpV.set(P.x - c.x, 0, P.z - c.z).normalize();
+          q.v.set(o.x * rand(12, 40), rand(25, 65), o.z * rand(12, 40)); q.w.set(rand(-4, 4), 0, rand(-4, 4)); q.t = 40; q.m.visible = true; q.m.rotation.set(0, rand(0, TAU), 0);
+        });
+        battle.attach(dish); dish.userData.v = new V3(rand(-6, 6), 48, rand(4, 12)); dish.userData.t = 40; // the uplink dish goes up end over end
+        smokes.forEach((q, i) => { const tall = i % 3 !== 0; q.m.position.set(c.x + rand(-8, 8), rand(6, 14), c.z + rand(-10, 10)); q.v.set(rand(-4, 4) * (tall ? 1 : 3), tall ? rand(14, 24) : rand(2, 5), rand(-4, 4) * (tall ? 1 : 3)); q.life = q.t = rand(10, 15); q.s0 = rand(3, 6); q.s1 = tall ? rand(14, 26) : rand(10, 16); q.m.visible = true; });
+        Sound.mega(); pulse(1, 700); R.flash = 1;
         SELF.t = null; shock.visible = true; shock.userData.t = 0; shock.position.set(c.x, 0.5, c.z);
         const far = Math.hypot(A.x - c.x, A.z - c.z);
         if (alive() && far < 250) killNow("burn"); // caught in the blast
-        R.chain = [0.4, 0.8, 1.1, 1.6, 2.2, 2.9, 3.7]; R.chainT = 0; R.chainC = c.clone(); Sound.rumble(1);
-        R.stage = "home"; showMsg("BUNKER DESTROYED", R.atHome ? "the uplink is gone" : far < 250 ? "caught in the blast" : "keep running · our lines are at the green beam", COL.heal, 3.5);
+        R.chain = [0.4, 0.7, 1.0, 1.3, 1.6, 2.0, 2.4, 2.9, 3.4, 4.0, 4.7, 5.5, 6.4]; R.chainT = 0; R.chainC = c.clone(); Sound.rumble(1);
+        R.stage = "home"; showMsg("BUNKER DESTROYED", R.atHome || R.cine ? "the uplink is gone" : far < 250 ? "caught in the blast" : "keep running · our lines are at the green beam", COL.heal, 3.5);
+      },
+      cineView(xr) { // up on a rise along the field, looking back at the bunker; in the headset it's a cut to a still viewpoint, no camera moves
+        const Cn = R.cine, c = Cn.c, k = smooth01(Cn.t / 10), bt = Cn.blowAt === undefined ? -1 : Cn.t - Cn.blowAt;
+        const vx = c.x + (xr ? 8 : lerp(4, 12, k)), vz = c.z + (xr ? 120 : lerp(90, 150, k)), vy = groundAt(vx, vz) + (xr ? 7 : lerp(5, 10, k));
+        const ty = xr ? 0 : lerp(14, 55, smooth01(bt / 5)), dx = c.x - vx, dz = c.z - vz, yaw = Math.atan2(-dx, -dz);
+        rig.rotation.y = yaw;
+        if (xr) { const e = camera.position, cy = Math.cos(yaw), sy = Math.sin(yaw); rig.position.set(vx - (e.x * cy + e.z * sy), vy - e.y, vz - (-e.x * sy + e.z * cy)); }
+        else { const sh = bt < 0 ? 0 : 0.5 * Math.exp(-bt * 1.2) + (bt > 1.2 && bt < 2.5 ? 1.1 * (2.5 - bt) : 0); rig.position.set(vx + rand(-1, 1) * sh, vy - 1.6 + rand(-1, 1) * sh, vz + rand(-1, 1) * sh); camera.rotation.x = Math.atan2(c.y + ty - vy, Math.hypot(dx, dz)); }
       },
       escapeStep(dt, t, live) {
         if (R.chain && R.chain.length) { // the bunker's secondary explosions
-          R.chainT += dt; while (R.chain.length && R.chainT >= R.chain[0]) { R.chain.shift(); const c = R.chainC, x = c.x + rand(-20, 20), z = c.z + rand(-28, 28); burst(x, rand(2, 10), z, Math.random() < 0.5 ? C_ORANGE : C_RED, 70); fxSprite(false, x, rand(3, 9), z, rand(10, 18), 1.2); Sound.blast(1, Math.hypot(A.x - x, A.z - z)); pulse(0.5, 150); }
+          R.chainT += dt; while (R.chain.length && R.chainT >= R.chain[0]) { R.chain.shift(); const c = R.chainC, x = c.x + rand(-20, 20), z = c.z + rand(-28, 28); burst(x, rand(2, 10), z, Math.random() < 0.5 ? C_ORANGE : C_RED, 70); fxSprite(false, x, rand(3, 9), z, rand(10, 18), 1.2); blast(new V3(x, rand(4, 14), z), rand(18, 35), 1.4, Math.random() < 0.5 ? 0xff8a1f : 0xffc24a); const E = R.cine ? rig.position : A; Sound.blast(1, Math.hypot(E.x - x, E.z - z) * (R.cine ? 0.5 : 1)); pulse(0.5, 150); }
         }
-        if (R.stage === "out" || R.stage === "home") { // the whole field is coming apart: shells and secondaries all round you as you run
+        if ((R.stage === "out" || R.stage === "home") && !R.cine) { // the whole field is coming apart: shells and secondaries all round you as you run
           R.escBoom = (R.escBoom ?? 0.5) - dt;
           if (R.escBoom <= 0) {
             R.escBoom = rand(0.35, 1.0); const near = Math.random() < 0.25, a = rand(0, TAU), d = near ? rand(9, 16) : rand(18, 90), x = A.x + Math.sin(a) * d, z = A.z + Math.cos(a) * d, gy = groundAt(x, z);
@@ -2854,9 +2884,17 @@
           if (R.slT > 4) R.slT = -1;
         }
         if (R.stage === "out" && !R.atHome && A.z > R.homeZ) { R.atHome = true; SELF.t = Math.min(SELF.t, 4); showMsg("YOU'RE CLEAR", "watch the uplink go", COL.heal, 3); }
-        if (!BDOOR.gone && SELF.t !== null && SELF.t <= 0) this.blowBunker();
+        if (!BDOOR.gone && !R.cine && SELF.t !== null && SELF.t <= 1.8 && live && Math.hypot(A.x, A.z - (BT.bz - (BROWS * BC) / 2)) >= 250) { // far enough away to watch: cut to a view of it
+          R.cine = { t: 0, c: new V3(0, 3, BT.bz - (BROWS * BC) / 2), dens: U.uFogDensity.value }; U.uFogDensity.value = runScene.fog.density = 0.0064; $("hud").style.visibility = "hidden"; showMsg("THE UPLINK BUNKER", "self-destruct", COL.alarm, 1.7);
+        }
+        if (!BDOOR.gone && SELF.t !== null && SELF.t <= 0) { this.blowBunker(); if (R.cine) R.cine.blowAt = R.cine.t; }
+        if (R.cine) {
+          const Cn = R.cine; Cn.t += dt; Sound.rumble(Cn.blowAt === undefined ? 0.3 : 1);
+          if (Cn.blowAt !== undefined && !Cn.shook && Cn.t > Cn.blowAt + 1.2) { Cn.shook = true; pulse(1, 700); Sound.blast(1, 4); } // the shockwave reaches you
+          if (Cn.blowAt !== undefined && Cn.t > Cn.blowAt + 8.5) { U.uFogDensity.value = runScene.fog.density = Cn.dens; R.cine = null; $("hud").style.visibility = ""; }
+        }
         homeBeam.visible = R.stage === "home" || R.stage === "out"; homeBeam.position.set(0, groundAt(0, R.homeZ) + 30, R.homeZ);
-        if (R.stage === "home" && live && A.z > R.homeZ && !R.over) {
+        if (R.stage === "home" && live && A.z > R.homeZ && !R.over && !R.cine) {
           R.stage = "done"; homeBeam.visible = false; Sound.connected();
           levelComplete("HOME", `${R.freed} freed · ${R.kills} threats down · ${fmtTime(R.time)}`); R.overT = R.overMax = 4;
           showBrief("Mission complete", "You won", `The space lasers are burning up across the sky and the uplink bunker is a smoking crater. You made it home${R.freed ? `, and brought ${R.freed} of ours with you` : ""}. Game over.`, COL.heal, renderer.xr.isPresenting ? "Pull the trigger to return to base" : "Click or press Space to return to base");
@@ -2895,7 +2933,7 @@
         const live = alive(), xr = renderer.xr.isPresenting, jack = R.stage === "jack", L = this;
         R.speed = 0;
         // movement: stick or keys; in the headset, forward is wherever you're looking (the head pose is relative to the turned rig)
-        if (live && !jack && R.stage !== "done") { // turning: snap or smooth in the headset (right stick), smooth on keys (Q/E)
+        if (live && !jack && !R.cine && R.stage !== "done") { // turning: snap or smooth in the headset (right stick), smooth on keys (Q/E)
           const tv = IN.turn;
           if (!xr || opts.turn === "smooth") R.face -= tv * (xr ? 1.75 : 2.2) * dt;
           else { if (Math.abs(tv) > 0.6 && !R.snapHeld) { R.face -= Math.sign(tv) * (Math.PI / 6); R.snapHeld = true; Sound.blip(2); } if (Math.abs(tv) < 0.3) R.snapHeld = false; }
@@ -2904,7 +2942,7 @@
         const homeward = R.stage === "escape" || R.stage === "out" || R.stage === "home" || R.stage === "done", dirZ = homeward ? -1 : 1;
         BDOOR.open = R.stage !== "advance";
         if (xr) { const f = tmpV.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(THREE.Object3D.DefaultUp, R.face), l = Math.hypot(f.x, f.z); if (l > 0.2) { fx = f.x / l; fz = f.z / l; } }
-        const go = live && !jack ? IN.y : 0, side = live && !jack ? IN.x : 0;
+        const go = live && !jack && !R.cine ? IN.y : 0, side = live && !jack && !R.cine ? IN.x : 0;
         const sp = (go > 0 ? (IN.boost ? 9.5 : 6) : 3.5) * (R.wireT > 0 ? 0.3 : 1);
         A.vx += ((fx * go - fz * side) * sp - A.vx) * Math.min(1, dt * 7); R.vz += ((fz * go + fx * side) * sp - R.vz) * Math.min(1, dt * 7);
         R.wireT = Math.max(0, R.wireT - dt); R.wireHit -= dt;
@@ -2923,7 +2961,7 @@
             if (A.y <= gy && (R.vy < 0 || A.y < gy - 0.4)) { R.jumping = false; R.by = A.y; }
           } else {
             R.by += (gy - R.by) * Math.min(1, dt * (gy > R.by ? 4.5 : 10)); A.y = R.by;
-            if (IN.jump && live && Math.abs(gy - R.by) < 0.4) { R.jumping = true; R.vy = 7; Sound.whoosh(); }
+            if (IN.jump && live && !R.cine && Math.abs(gy - R.by) < 0.4) { R.jumping = true; R.vy = 7; Sound.whoosh(); }
           }
           if (live && tz0 !== undefined && (homeward ? tz0 > R.cp : tz0 < R.cp)) R.cp = tz0;
         }
@@ -3056,8 +3094,24 @@
           }
           if (d.t <= 0) d.m.visible = false;
         }
+        for (const q of bChunks) { // the ziggurat's wreckage: thrown, bouncing once, then lying where it fell
+          if (q.t <= 0) continue; q.t -= dt; if (q.v.lengthSq() > 0) { q.v.y -= 25 * dt; q.m.position.addScaledVector(q.v, dt); q.m.rotation.x += q.w.x * dt; q.m.rotation.z += q.w.z * dt; }
+          const P = q.m.position, gy = groundAt(P.x, P.z) + 0.6;
+          if (P.y < gy && q.v.y < 0) { if (q.v.y < -10) { burst(P.x, gy + 0.5, P.z, C_ORANGE, 20); q.v.set(q.v.x * 0.4, -q.v.y * 0.25, q.v.z * 0.4); q.w.multiplyScalar(0.4); } else { q.v.set(0, 0, 0); P.y = gy; } }
+          if (q.t <= 0) q.m.visible = false;
+        }
+        if (dish.parent === battle && dish.userData.t > 0) { const v = dish.userData.v; dish.userData.t -= dt; if (v.lengthSq() > 0) { v.y -= 25 * dt; dish.position.addScaledVector(v, dt); dish.rotation.x += dt * 2.4; dish.rotation.z += dt * 1.1; if (dish.position.y < groundAt(dish.position.x, dish.position.z)) { v.set(0, 0, 0); burst(dish.position.x, dish.position.y + 1, dish.position.z, C_ORANGE, 50); } } }
+        if (cloudCap.visible) { // the mushroom: a ring of fire climbing on its stem, cooling as it goes
+          const u = (cloudCap.userData.t += dt), g = smooth01(u / 6); cloudCap.position.y = 18 + 80 * (1 - Math.exp(-u * 0.35)); cloudCap.scale.set(10 + 32 * g, 10 + 32 * g, 6 + 16 * g);
+          cloudCap.material.color.setHSL(0.07, 1, lerp(0.6, 0.3, Math.min(1, u / 6))); cloudCap.material.opacity = 0.9 * Math.max(0, 1 - u / 16); if (u > 16) cloudCap.visible = false;
+        }
+        for (const q of smokes) {
+          if (q.t <= 0) continue; q.t -= dt; const a = 1 - q.t / q.life, h = Math.min(1, a * 2.5);
+          q.m.position.addScaledVector(q.v, dt); q.v.multiplyScalar(1 - dt * 0.25); q.m.scale.setScalar(lerp(q.s0, q.s1, smooth01(a * 1.5)));
+          q.m.material.color.setRGB(lerp(0.9, 0.16, h), lerp(0.35, 0.08, h), lerp(0.08, 0.04, h)); q.m.material.opacity = 0.85 * Math.min(1, (1 - a) * 3); if (q.t <= 0) q.m.visible = false;
+        }
         if (shock.visible) { shock.userData.t += dt; const k2 = shock.userData.t / 2.5; shock.scale.setScalar(5 + 245 * smooth01(k2)); shock.material.opacity = Math.max(0, 1 - k2); if (k2 >= 1) shock.visible = false; }
-        if (pillar.visible) { pillar.userData.t += dt; const k2 = pillar.userData.t / 5; pillar.scale.set(1 + k2, 1 + k2 * 1.5, 1 + k2); pillar.material.opacity = Math.max(0, 1 - k2); if (k2 >= 1) pillar.visible = false; }
+        if (pillar.visible) { pillar.userData.t += dt; const k2 = pillar.userData.t / 9; pillar.scale.set(1 + k2 * 0.8, 1 + k2 * 1.3, 1 + k2 * 0.8); pillar.material.opacity = Math.max(0, 1 - k2); if (k2 >= 1) pillar.visible = false; }
         R.flash = Math.max(0, R.flash - dt * 0.6); if (R.fogBase0) R.fogBase.copy(R.fogBase0).lerp(C_ORANGE, R.flash * 0.5);
         if (R.stage === "escape" || R.stage === "out" || R.stage === "home") this.escapeStep(dt, t, live);
         // mines: the HUD rings any within 9 m; step on one (feet on the ground) and it takes a whole jack
@@ -3069,8 +3123,8 @@
           if (live && !jack && d < 0.85 && A.y - R.gy < 0.45) { killNow("shatter"); L.blowMine(M); continue; }
           if (d < 45 && M.z < A.z + 2) addT(M.x, M.y + 0.1, M.z, 0.7, false, () => { if (M.on) L.blowMine(M); });
         }
-        for (const c of BT.chunks) c.m.visible = c.z1 < A.z + 60 && c.z0 > A.z - 190; // only the ground you can see through the haze
-        for (const b of BT.bagRows) b.im.visible = Math.abs(b.z - A.z) < 190;
+        const vz0 = R.cine ? rig.position.z : A.z; for (const c of BT.chunks) c.m.visible = c.z1 < vz0 + 60 && c.z0 > vz0 - 190; // only the ground you can see through the haze
+        for (const b of BT.bagRows) b.im.visible = Math.abs(b.z - vz0) < 190;
         // friendlies: waving for help until you reach them, then they run back the way you came
         for (const F of friendlies) {
           if (F.st === "gone") continue;
@@ -3167,6 +3221,7 @@
           rig.position.z += (A.z - ffz * back - rig.position.z) * f;
         }
         if (!xr) camera.rotation.x = first ? 0 : -0.14;
+        if (R.cine) L.cineView(xr);
         const vf = A.vx * -sf + R.vz * -cf, vr = A.vx * cf - R.vz * sf; // velocity along your facing, and to its right
         R.yaw = lerp(R.yaw, jack ? 0 : clamp(Math.atan2(-vr, Math.max(1.5, vf)), -1.2, 1.2), Math.min(1, dt * 6));
         construct.root.position.set(A.x, A.y - 0.28 + bob, A.z); construct.root.rotation.set(-0.1 * k, R.face + R.yaw, 0);
@@ -3205,7 +3260,7 @@
           }
           nb++;
         }
-        brGeo.setDrawRange(0, nb * BRV); updateVisor(true, nb, R.integrity, t); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
+        brGeo.setDrawRange(0, nb * BRV); updateVisor(!R.cine, nb, R.integrity, t); brGeo.attributes.position.needsUpdate = brGeo.attributes.color.needsUpdate = true; bracketLines.visible = nb > 0;
         if (R.stage === "home" || R.stage === "out") { // going home: the waypoint marks our lines
           const wd = Math.max(0, R.homeZ - A.z);
           waypoint.m.visible = live && !R.over; waypoint.m.position.set(0, groundAt(0, R.homeZ) + 7.5, R.homeZ); waypoint.m.lookAt(camW); waypoint.m.scale.setScalar(clamp(wd * 0.055, 2, 14));
