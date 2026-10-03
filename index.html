@@ -919,8 +919,29 @@
     const [jx, jz] = bunkerSpots.J, chair = mergeGeos([[new THREE.BoxGeometry(1.2, 0.5, 1.2), mat4(jx, 0.5, jz)], [new THREE.BoxGeometry(1.2, 1.4, 0.25), mat4(jx, 1.2, jz - 0.6)]]);
     bunker.add(new THREE.Mesh(chair, bunkerWallMat));
   }
-  // on the roof: the uplink dish and antenna masts with blinking lights
-  const dish = new THREE.Group(); dish.position.set(9, 5.8, BT.bz - 20); bunker.add(dish);
+  // outside, it's the film's ziggurat: a striped orange / tan / brown shell over the walls, stepped tiers on the roof,
+  // a glowing tan door frame, and a big gatling on top that tracks you
+  const zigMat = shader({ ...U }, `void main(){
+      vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld))); float l = abs(dot(n, normalize(vec3(0.25, 0.55, -0.8))));
+      float b = fract(vWorld.y / 1.2), stripe = b < 0.45 ? 0.0 : b < 0.8 ? 1.0 : 2.0;
+      vec3 col = stripe < 0.5 ? vec3(0.85, 0.38, 0.10) : stripe < 1.5 ? vec3(0.86, 0.70, 0.44) : vec3(0.32, 0.14, 0.05);
+      float groove = smoothstep(0.03, 0.0, abs(b - 0.45)) + smoothstep(0.03, 0.0, abs(b - 0.8)); col *= 1.0 - groove * 0.6;
+      col *= 0.4 + 0.8 * l; col *= 0.85 + 0.15 * hash(floor(vWorld.xz * 1.5));
+      gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
+    }`);
+  const TIER = [[0, 5.8, 40.2, 57.6], [5.8, 8.8, 36, 52], [8.8, 11.8, 28, 40], [11.8, 14.3, 18, 26]]; // [y0, y1, width, depth]
+  {
+    const W2 = (BCOLS * BC) / 2 + 0.06, D = BROWS * BC, zc = BT.bz - D / 2, parts = [], bx = (x0, x1, y0, y1, z0, z1) => parts.push([new THREE.BoxGeometry(x1 - x0, y1 - y0, z0 - z1), mat4((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)]);
+    const fz = BT.bz + 0.06, bz2 = BT.bz - D - 0.06;
+    bx(-W2, -1.5, 0, 5.8, fz, fz - 0.1); bx(1.5, W2, 0, 5.8, fz, fz - 0.1); bx(-1.5, 1.5, 3, 5.8, fz, fz - 0.1); // the front, round the doorway
+    bx(-W2, W2, 0, 5.8, bz2 + 0.1, bz2); bx(-W2, -W2 + 0.1, 0, 5.8, fz, bz2); bx(W2 - 0.1, W2, 0, 5.8, fz, bz2);
+    for (const [y0, y1, w, d] of TIER.slice(1)) bx(-w / 2, w / 2, y0, y1, zc + d / 2, zc - d / 2);
+    bunker.add(new THREE.Mesh(mergeGeos(parts), zigMat));
+    const frame = mergeGeos([[new THREE.BoxGeometry(0.35, 3.4, 0.4), mat4(-1.7, 1.7, BT.bz + 0.15)], [new THREE.BoxGeometry(0.35, 3.4, 0.4), mat4(1.7, 1.7, BT.bz + 0.15)], [new THREE.BoxGeometry(3.75, 0.35, 0.4), mat4(0, 3.4, BT.bz + 0.15)]]);
+    bunker.add(new THREE.Mesh(frame, new THREE.MeshBasicMaterial({ color: 0xffd890 })));
+  }
+  // on the tiers: the uplink dish and antenna masts with blinking lights
+  const dish = new THREE.Group(); dish.position.set(9, 11.8, BT.bz - 16); bunker.add(dish);
   {
     const lm = new THREE.LineBasicMaterial({ color: 0x9fffb0 }), pts = []; for (let i = 0; i <= 12; i++) { const r = (i / 12) * 6; pts.push(new THREE.Vector2(r, (r * r) / 12)); }
     const bowl = new THREE.LatheGeometry(pts, 24); const bowlM = new THREE.Mesh(bowl, new THREE.MeshBasicMaterial({ color: 0x163a22, side: THREE.DoubleSide })); bowlM.add(new THREE.LineSegments(new THREE.EdgesGeometry(bowl, 1), lm));
@@ -929,8 +950,8 @@
     dish.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 3, 8), bunkerWallMat).translateY(1.5), head); dish.userData.head = head;
   }
   const mastLights = [];
-  for (const [x, z, h] of [[-16, -4, 18], [16, -6, 14], [-15, -44, 16], [15, -48, 20], [0, -38, 12]]) {
-    const g = new THREE.Group(); g.position.set(x, 5.8, BT.bz + z);
+  for (const [x, z, h, y] of [[-16, -4, 14, 5.8], [16, -6, 11, 5.8], [-15, -50, 13, 5.8], [15, -52, 16, 5.8], [-6, -40, 10, 14.3], [6, -18, 9, 14.3]]) {
+    const g = new THREE.Group(); g.position.set(x, y, BT.bz + z);
     g.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, h, 0.3), bunkerWallMat).translateY(h / 2));
     for (let k = 1; k < 4; k++) g.add(new THREE.Mesh(new THREE.BoxGeometry(2.2 - k * 0.5, 0.12, 0.12), bunkerWallMat).translateY((h * k) / 4));
     const light = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a3a, fog: false, transparent: true })); light.position.y = h + 0.3; g.add(light); mastLights.push(light);
@@ -975,6 +996,8 @@
   const tankGeo = mergeGeos([[new THREE.BoxGeometry(3.2, 1.0, 5), mat4(0, 0.85, 0)], [new THREE.BoxGeometry(0.75, 0.95, 5.5), mat4(-1.8, 0.48, 0)], [new THREE.BoxGeometry(0.75, 0.95, 5.5), mat4(1.8, 0.48, 0)], [new THREE.BoxGeometry(3.4, 0.25, 1.4), mat4(0, 1.2, 2.3, 0.35)]]);
   const turretGeo = mergeGeos([[new THREE.BoxGeometry(1.9, 0.8, 2.1), mat4(0, 0, 0)], [new THREE.CylinderGeometry(0.13, 0.16, 2.8, 6), mat4(0, 0.05, 2.3, Math.PI / 2)]]);
   function threatHull(geo, fill = goldFill, edge = goldEdge) { const g = new THREE.Group(); g.add(new THREE.Mesh(geo, fill)); g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 15), edge)); return g; }
+  // the big gatling on top of the ziggurat (it tracks you)
+  const bunkerGun = (() => { const g = threatHull(mgGeo, steelFill, steelEdge); g.scale.setScalar(3.2); const base = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.6, 1.2, 10), steelFill); base.position.y = -1.0 / 3.2; g.add(base); g.position.set(0, 15.6, BT.bz - (BROWS * BC) / 2); bunker.add(g); return g; })();
   const threats = [];
   {
     const add = (kind, x, z, guard) => {
@@ -1799,6 +1822,72 @@
     c.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.03, 0), new THREE.MeshBasicMaterial({ color: i ? 0xff47d4 : 0x35e6ff, wireframe: true })));
     return c;
   });
+  // ---- the sim's effects (Lawnmower Man): tracer streams across the sky, blue-white starbursts on the horizon,
+  // blocky yellow blasts when something dies, and a chrome gun and glove for you
+  const fxTracers = (() => {
+    const N = 80, im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.5, 5), new THREE.MeshBasicMaterial({ color: 0xfff2c8, fog: false }), N);
+    im.frustumCulled = false; im.visible = false; runScene.add(im);
+    const streams = Array.from({ length: 8 }, () => ({ on: false, t: 0, o: new V3(), v: new V3() }));
+    return { im, streams, N };
+  })();
+  function starTex(draw) { const c = document.createElement("canvas"); c.width = c.height = 256; draw(c.getContext("2d")); return new THREE.CanvasTexture(c); }
+  const starburstMat = new THREE.SpriteMaterial({ map: starTex((g) => { // a spiky blue-white flash
+    const r = g.createRadialGradient(128, 128, 0, 128, 128, 128); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.18, "rgba(160,230,255,0.9)"); r.addColorStop(1, "rgba(30,90,255,0)");
+    g.fillStyle = r; g.beginPath(); for (let i = 0; i < 28; i++) { const a = (i / 28) * TAU, rr = i % 2 ? 26 : 70 + Math.random() * 58; g.lineTo(128 + Math.cos(a) * rr, 128 + Math.sin(a) * rr); } g.closePath(); g.fill();
+  }), blending: ADD, depthWrite: false, fog: false, transparent: true });
+  const blockyMat = new THREE.SpriteMaterial({ map: starTex((g) => { // the film's chunky yellow explosion, with a violet-white core
+    for (let i = 0; i < 70; i++) { const a = Math.random() * TAU, d = Math.pow(Math.random(), 0.7) * 100, w = 14 + Math.random() * 30; g.fillStyle = Math.random() < 0.75 ? "#ffd21a" : "#ff9a12"; g.fillRect(128 + Math.cos(a) * d - w / 2, 128 + Math.sin(a) * d - w / 2, w, w * (0.5 + Math.random())); }
+    const r = g.createRadialGradient(128, 128, 0, 128, 128, 40); r.addColorStop(0, "rgba(255,240,255,1)"); r.addColorStop(1, "rgba(220,90,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 256, 256);
+  }), depthWrite: false, fog: false, transparent: true });
+  const fxSprites = Array.from({ length: 10 }, (_, i) => { const sp = new THREE.Sprite(i < 4 ? starburstMat.clone() : blockyMat.clone()); sp.visible = false; runScene.add(sp); return { sp, t: 0, life: 1, size: 1, star: i < 4 }; });
+  function fxSprite(star, x, y, z, size, life) {
+    const f = fxSprites.filter((q) => q.star === star).sort((a, b) => (a.sp.visible ? 1 : 0) - (b.sp.visible ? 1 : 0) || b.t / b.life - a.t / a.life)[0];
+    Object.assign(f, { t: 0, life, size }); f.sp.position.set(x, y, z); f.sp.visible = true; f.sp.material.rotation = Math.random() * TAU;
+  }
+  function updateFxSprites(dt) {
+    for (const f of fxSprites) { if (!f.sp.visible) continue; f.t += dt; const k = f.t / f.life; f.sp.scale.setScalar(f.size * (f.star ? 0.5 + 0.9 * Math.sin(Math.min(1, k) * Math.PI) : 0.4 + 0.8 * Math.sqrt(k))); f.sp.material.opacity = f.star ? 1 - k : Math.max(0, 1 - k * k); if (k >= 1) f.sp.visible = false; }
+  }
+  function updateTracers(dt, on) {
+    const T = fxTracers; T.im.visible = on; if (!on) return;
+    for (const st of T.streams) {
+      if (!st.on) { if (Math.random() < dt * 0.35) { st.on = true; st.t = 0; const side = Math.random() < 0.5 ? -1 : 1; st.o.set(A.x + side * rand(80, 220), rand(0, 20), A.z - rand(120, 420)); st.v.set(-side * rand(40, 90), rand(60, 110), rand(-30, 30)); } continue; }
+      st.t += dt; if (st.t > 3.2) st.on = false;
+    }
+    let k = 0;
+    for (const st of T.streams) for (let j = 0; j < 10; j++) { // ten dashes along each stream, each a little behind the last
+      const tt = st.t - j * 0.09, show = st.on && tt > 0;
+      if (show) { dummy.position.set(st.o.x + st.v.x * tt, st.o.y + st.v.y * tt - 12 * tt * tt, st.o.z + st.v.z * tt); tmpV.set(st.v.x, st.v.y - 24 * tt, st.v.z); dummy.quaternion.setFromUnitVectors(new V3(0, 0, 1), tmpV.normalize()); dummy.scale.setScalar(1); }
+      else { dummy.position.set(0, -999, 0); dummy.scale.setScalar(0); }
+      dummy.updateMatrix(); T.im.setMatrixAt(k++, dummy.matrix);
+    }
+    dummy.quaternion.identity(); dummy.scale.setScalar(1); T.im.instanceMatrix.needsUpdate = true;
+  }
+  // chrome: your gun (right hand) and glove (left hand) on the battlefield, as in the film
+  const chromeMat = new THREE.MeshPhongMaterial({ color: 0x7c848e, emissive: 0x121519, specular: 0xffffff, shininess: 140, flatShading: true });
+  function chromeGun() {
+    const g = new THREE.Group(), m = (geo, x, y, z, rx = 0) => { const o = new THREE.Mesh(geo, chromeMat); o.position.set(x, y, z); o.rotation.x = rx; g.add(o); return o; };
+    m(new THREE.BoxGeometry(0.07, 0.09, 0.26), 0, 0, -0.02); m(new THREE.CylinderGeometry(0.022, 0.026, 0.3, 8), 0, 0.01, -0.28, Math.PI / 2);
+    m(new THREE.CylinderGeometry(0.055, 0.055, 0.08, 10), 0, -0.01, 0.06, Math.PI / 2); m(new THREE.BoxGeometry(0.04, 0.1, 0.05), 0, -0.08, 0.04, 0.3);
+    const lit = (c, x) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(0.018, 0.018), new THREE.MeshBasicMaterial({ color: c })); o.position.set(x, 0.0, 0.106); g.add(o); };
+    lit(0x2bd04a, -0.015); lit(0xe0202a, 0.015); return g;
+  }
+  function chromeGlove() {
+    const g = new THREE.Group(), m = (w, h, d, x, y, z, rx = 0, rz = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), chromeMat); o.position.set(x, y, z); o.rotation.set(rx, 0, rz); g.add(o); };
+    m(0.085, 0.022, 0.09, 0, 0, 0); m(0.06, 0.05, 0.08, 0, -0.005, 0.07);
+    [-0.03, -0.01, 0.01, 0.03].forEach((x, i) => m(0.016, 0.016, 0.075 - Math.abs(i - 1.5) * 0.008, x * 1.2, 0.0, -0.08, 0.15, x * 4));
+    m(0.018, 0.018, 0.06, -0.055, 0.0, -0.01, 0, 0.9); return g;
+  }
+  const handProps = [0, 1].map(() => { const g = new THREE.Group(); g.add(chromeGun()); const gl = chromeGlove(); g.add(gl); g.userData.glove = gl; g.visible = false; return g; });
+  const pcGun = chromeGun(); pcGun.position.set(0.17, -0.16, -0.36); pcGun.visible = false; camera.add(pcGun);
+  function updateHandProps(on) { // in VR the right controller holds the gun, the left wears the glove; on a screen, the gun sits in first person
+    const xr = renderer.xr.isPresenting;
+    ctrls.forEach((c, i) => {
+      const P = handProps[i], src = c.userData.src; if (P.parent !== c) c.add(P);
+      const show = on && xr && !!(src && src.gamepad), right = src && src.handedness !== "left";
+      P.visible = show; P.children[0].visible = right; P.userData.glove.visible = !right;
+    });
+    pcGun.visible = on && !xr && isFirst();
+  }
   const reticles = [0, 1].map((i) => {
     const m = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 4, 24), new THREE.MeshBasicMaterial({ color: i ? 0xff47d4 : 0x35e6ff, depthTest: false, transparent: true, fog: false }));
     m.renderOrder = 25; m.visible = false; runScene.add(m); return m;
@@ -1909,7 +1998,7 @@
     B.on = false; bossRoot.visible = false;
     exitPort.visible = false; beijingPort.visible = false;
     trapGroup.visible = false; cage.visible = false; polyGroup.visible = false; tunnel.visible = false;
-    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false);
+    battle.visible = jackPort.visible = waypoint.m.visible = uplink.visible = hintArrow.visible = handDots.visible = false; bracketLines.visible = false; updateVisor(false); fxTracers.im.visible = false; fxSprites.forEach((f) => (f.sp.visible = false)); handProps.forEach((p) => (p.visible = false)); pcGun.visible = false;
     construct.body.rotation.x = -Math.PI / 2; construct.gun.visible = false;
     corridor.visible = spikeMesh.visible = spanBar.visible = false; spikes.forEach((s) => (s.on = false)); keyWalls.forEach((w) => { w.on = false; w.g.visible = false; });
     reticles.forEach((r) => (r.visible = false));
@@ -2509,6 +2598,7 @@
       },
       kill(T, x, y) {
         T.on = false; T.g.visible = false; R.kills++;
+        fxSprite(false, x, y + 0.4, T.z, T.kind === "soldier" || T.kind === "guard" ? 4 : T.kind === "rec" ? 16 : 8, 0.9); // the blocky yellow blast
         R.data += T.kind === "tank" ? 25 : T.kind === "rec" ? 20 : T.kind === "mg" ? 10 : T.kind === "turret" ? 8 : 4; R.god = Math.min(100, R.god + (T.kind === "soldier" ? 6 : 14));
         burst(x, y, T.z, C_ORANGE, T.kind === "soldier" ? 30 : 60); shatterCube(x, y, T.z, C_RED, T.kind === "soldier" ? 12 : 24); Sound.blast(T.kind === "soldier" || T.kind === "guard" ? 0.15 : T.kind === "tank" || T.kind === "rec" ? 1 : 0.55, Math.hypot(A.x - x, A.z - T.z));
         if (T.kind === "tank") { for (let k = 0; k < 4; k++) burst(x + rand(-2, 2), rand(0.5, 3), T.z + rand(-2, 2), k % 2 ? C_RED : C_ORANGE, 40); showMsg("TANK DOWN", "", COL.amber, 1.4); }
@@ -2645,6 +2735,7 @@
           Sound.say("denied"); showMsg("DOOR LOCKED", `missing ${4 - have} code digit${4 - have === 1 ? "" : "s"} · follow the violet beams`, "#d04dff", 3.5);
         }
         if (R.stage !== "advance") bunkerDoor.position.y = Math.min(4.6, bunkerDoor.position.y + dt * 1.5);
+        if (bunker.visible) { const gp = bunkerGun.position; bunkerGun.rotation.y = Math.atan2(A.x - gp.x, A.z - gp.z); bunkerGun.rotation.x = -clamp(Math.atan2(gp.y - A.y, Math.hypot(A.x - gp.x, A.z - gp.z)), -0.2, 0.9) * 0.6; }
         // the uplink: the dish turns, the masts blink, a beam runs up to the space laser, which strikes now and then
         dish.userData.head.parent.rotation.y += dt * 0.15; mastLights.forEach((m, i) => (m.material.opacity = Math.sin(t * 3 + i) > 0.3 ? 1 : 0.15));
         if (uplinkBeam.visible) { const pa = uplinkBeam.geometry.attributes.position; dish.userData.head.getWorldPosition(btV); pa.setXYZ(0, btV.x, btV.y + 2, btV.z); pa.setXYZ(1, spaceLaser.position.x, spaceLaser.position.y, spaceLaser.position.z); pa.needsUpdate = true; uplinkBeam.material.opacity = 0.3 + 0.3 * Math.sin(t * 7); }
@@ -2744,6 +2835,7 @@
         R.boomT -= dt; if (R.boomT <= 0) { // shelling off to the sides: seen, and often heard
           R.boomT = rand(0.8, 2.5); const bx = (Math.random() < 0.5 ? -1 : 1) * rand(16, 40), bz = A.z - rand(15, 70);
           burst(bx, rand(0.5, 4), bz, Math.random() < 0.5 ? C_ORANGE : C_RED, 30); if (Math.random() < 0.5) Sound.blast(rand(0.3, 0.9), Math.hypot(bx - A.x, bz - A.z) + rand(40, 160));
+          if (Math.random() < 0.45) { const a = rand(-1.2, 1.2) + (homeward ? Math.PI : 0), d = rand(260, 480); fxSprite(true, A.x + Math.sin(a) * d, rand(4, 25), A.z - Math.cos(a) * d, rand(60, 130), rand(0.9, 1.6)); } // blue-white flash on the horizon
         }
         // into the bunker: jack in, and the soldier tips forward into flight
         jackPort.rotation.z += dt * 0.8; termScreen.material.color.setHSL(0.52, 1, 0.45 + 0.15 * Math.sin(t * 6));
@@ -2776,6 +2868,7 @@
         finishConstruct(t, false);
         keyLight.position.set(A.x + 1, A.y + 2.4, A.z + 2);
         btGroundMat.uniforms.uRed.value = R.red;
+        updateFxSprites(dt); updateTracers(dt, !bcell(A.x, A.z) || BDOOR.gone); updateHandProps(live && !jack);
         updatePackets(dt, t, false);
         // HUD: brackets on every threat in range, waypoint over the bunker
         const e = camera.matrixWorld.elements; let nb = 0; // brackets face the camera: corners along its right and up vectors
@@ -3785,7 +3878,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, cubies, cubeRoot, applyMove, cubeSolved, renderer, Sound, SELF, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, cubies, cubeRoot, applyMove, cubeSolved, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
