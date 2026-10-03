@@ -664,6 +664,7 @@
   const DDN = 26, PHI = (1 + Math.sqrt(5)) / 2;
   const DDIR = [[0, 1, PHI], [0, 1, -PHI], [0, -1, PHI], [0, -1, -PHI], [1, PHI, 0], [1, -PHI, 0], [-1, PHI, 0], [-1, -PHI, 0], [PHI, 0, 1], [PHI, 0, -1], [-PHI, 0, 1], [-PHI, 0, -1]].map(([x, y, z]) => new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), new V3(x, y, z).normalize()));
   const dodecGeo = new THREE.DodecahedronGeometry(1.1, 0), dodecSpikeGeo = new THREE.ConeGeometry(0.09, 0.75, 4); dodecSpikeGeo.translate(0, 1.25, 0);
+  const iceSpikes = new THREE.InstancedMesh(dodecSpikeGeo, new THREE.MeshBasicMaterial({ color: 0xffc24a }), ICN * 12); iceSpikes.frustumCulled = false; runScene.add(iceSpikes); // ICE is the same spiked dodecahedron
   const dodecMesh = new THREE.InstancedMesh(dodecGeo, shader({ ...U }, SILVER_FS), DDN), dodecSpikes = new THREE.InstancedMesh(dodecSpikeGeo, new THREE.MeshBasicMaterial({ color: 0xffc24a }), DDN * 12);
   [dodecMesh, dodecSpikes].forEach((m) => { m.frustumCulled = false; m.visible = false; runScene.add(m); });
   const dodecs = Array.from({ length: DDN }, () => ({ on: false, x: 0, y: 0, z: 0, q: new THREE.Quaternion(), spin: new V3() }));
@@ -2257,7 +2258,7 @@
     reticles.forEach((r) => (r.visible = false));
     GOD.value = 0; U.uWarp.value = 0;
     dummy.scale.setScalar(0); dummy.updateMatrix();
-    for (const m of [pkSet.solid, pkSet.wire, ebSet.solid, ebSet.wire, pbSet.solid, pbSet.wire, pbeSet.solid, pbeSet.wire, iceMesh, boltMesh, shardMesh]) { for (let i = 0; i < m.count; i++) m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; }
+    for (const m of [iceSpikes, pkSet.solid, pkSet.wire, ebSet.solid, ebSet.wire, pbSet.solid, pbSet.wire, pbeSet.solid, pbeSet.wire, iceMesh, boltMesh, shardMesh]) { for (let i = 0; i < m.count; i++) m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; }
     shards.forEach((q) => (q.life = 0)); bLife.fill(0); bPos.fill(-9999); bGeo.attributes.position.needsUpdate = true;
     dummy.scale.setScalar(1);
     construct.restore(); construct.root.visible = true; construct.root.scale.setScalar(1);
@@ -2488,8 +2489,11 @@
       }
       if (p.on) { dummy.position.set(p.x, p.y, p.z); dummy.rotation.set(t * 1.1 + p.ph, t * 0.8 + p.ph, t * 0.5); dummy.scale.setScalar(1); } else dummy.scale.setScalar(0);
       dummy.updateMatrix(); iceMesh.setMatrixAt(i, dummy.matrix);
+      const on = p.on; dummy.scale.setScalar(on ? 0.77 : 0); const q0 = dummy.quaternion.clone(); // its spikes, scaled to its size
+      for (let k = 0; k < 12; k++) { dummy.quaternion.copy(q0).multiply(DDIR[k]); dummy.updateMatrix(); iceSpikes.setMatrixAt(i * 12 + k, dummy.matrix); }
+      dummy.quaternion.identity();
     }
-    iceMesh.instanceMatrix.needsUpdate = true;
+    iceMesh.instanceMatrix.needsUpdate = iceSpikes.instanceMatrix.needsUpdate = true;
   }
   function updateWalls(dt, t, onPass) {
     const RZ = rig.position.z;
