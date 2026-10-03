@@ -1411,6 +1411,55 @@
   shapeFace(0, 0.2, 0, 0);
   // two chrome gloves for a screen (they lunge in when you hold the button)
   let pcGloves = null; // made on first use (the chrome material is defined further down)
+  // the stakes: a security camera in the bunker's mainframe room, where your body hangs jacked in at the port and the guards are
+  // coming down the corridors; the trace is how close they are. Rendered small, green and grainy, into a monitor beside the face.
+  let pip = null; // made on first use
+  function makePip() {
+    const rt = new THREE.WebGLRenderTarget(384, 256), cam = new THREE.PerspectiveCamera(70, 1.5, 0.1, 45);
+    cam.position.set(0.8, 3.9, BT.bz - 48.5); cam.lookAt(0, 1.6, BT.bz - 53.7); // high on the front wall, looking down at you hanging at the port
+    const light = new THREE.PointLight(0xfff0d0, 3, 14); light.position.set(0, 3.6, BT.bz - 51.5); light.visible = false; battle.add(light);
+    const you = makeConstruct(); you.root.visible = false; you.body.rotation.x = -Math.PI / 2; you.root.position.set(JACK.x, JACK.y - 0.28, JACK.z + 0.1); battle.add(you.root);
+    const P = (cells) => cells.map(([c, r]) => new V3(cellX(c), 0, cellZ(r)));
+    const guards = [[P([[5, 9], [5, 10], [6, 10], [6, 12], [5, 12], [5, 14], [4, 14], [4, 16], [5, 17]]), 0],
+      [P([[7, 8], [7, 10], [6, 10], [6, 12], [7, 12], [7, 14], [8, 14], [8, 16], [7, 17]]), 0.12],
+      [P([[1, 10], [1, 14], [3, 14], [4, 14], [4, 16], [5, 16]]), 0.25]].map(([path, start]) => {
+      const g = threatHull(soldierGeo); g.visible = false; battle.add(g); let len = 0; for (let i = 1; i < path.length; i++) len += path[i].distanceTo(path[i - 1]); return { g, path, start, len, ph: rand(0, TAU) };
+    });
+    const mat = new THREE.ShaderMaterial({ uniforms: { uTex: { value: rt.texture }, uTime: U.uTime, uAlarm: { value: 0 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform sampler2D uTex; uniform float uTime; uniform float uAlarm; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        void main(){ vec2 uv = vUv; uv.x += (h(vec2(floor(uv.y * 90.0), floor(uTime * 20.0))) - 0.5) * 0.005;
+          float l = dot(texture2D(uTex, uv).rgb, vec3(0.3, 0.59, 0.11)); vec3 col = vec3(0.55, 1.0, 0.7) * (l * 1.7 + 0.05);
+          col *= 0.8 + 0.2 * sin(vUv.y * 240.0 + uTime * 8.0); col += (h(vUv * 300.0 + uTime) - 0.5) * 0.12;
+          col = mix(col, col * vec3(1.7, 0.3, 0.3), uAlarm); gl_FragColor = vec4(col, 1.0); }` });
+    const panel = new THREE.Group(); panel.position.set(-1.45, 0.35, 0.3); panel.rotation.y = 0.35; sysopGroup.add(panel);
+    const frame = new THREE.Mesh(new THREE.PlaneGeometry(1.28, 0.88), new THREE.MeshBasicMaterial({ color: 0xff2a3a, fog: false })); frame.position.z = -0.005; panel.add(frame);
+    panel.add(new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8), mat));
+    const lc = document.createElement("canvas"); lc.width = 1024; lc.height = 128; const ltex = new THREE.CanvasTexture(lc);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(1.28, 0.16), new THREE.MeshBasicMaterial({ map: ltex, transparent: true, fog: false, depthWrite: false })); label.position.y = -0.54; panel.add(label);
+    pip = { rt, cam, light, you, guards, mat, panel, lc, ltex, key: "", n: 0 };
+  }
+  function pipStep(t, dt, xr) { // move the guards along with the trace, and redraw the camera every other frame
+    const p = 1 - R.trace / 100; let near = 99;
+    for (const G of pip.guards) {
+      const q = clamp((p - G.start) / (1 - G.start), 0, 1); let d = q * G.len, i = 1;
+      while (i < G.path.length - 1 && d > G.path[i].distanceTo(G.path[i - 1])) { d -= G.path[i].distanceTo(G.path[i - 1]); i++; }
+      const a = G.path[i - 1], b = G.path[i], seg = a.distanceTo(b), k = seg ? Math.min(1, d / seg) : 1, walking = q > 0 && q < 1;
+      G.g.position.set(lerp(a.x, b.x, k), walking ? Math.abs(Math.sin(t * 7 + G.ph)) * 0.08 : 0, lerp(a.z, b.z, k));
+      G.g.rotation.y = q < 1 ? Math.atan2(b.x - a.x, b.z - a.z) : Math.atan2(JACK.x - G.g.position.x, JACK.z - G.g.position.z);
+      near = Math.min(near, Math.hypot(G.g.position.x - JACK.x, G.g.position.z - JACK.z));
+    }
+    pip.mat.uniforms.uAlarm.value = R.trace < 25 ? 0.5 + 0.5 * Math.sin(t * 10) : 0;
+    const key = `${Math.ceil(near)}`;
+    if (key !== pip.key) { pip.key = key; const g = pip.lc.getContext("2d"); g.clearRect(0, 0, 1024, 128); g.font = "bold 58px 'Share Tech Mono', monospace"; g.fillStyle = near < 8 ? "#ff3a4a" : "#9fffb0"; g.fillText(`CAM 04 · YOUR BODY · GUARDS ${Math.ceil(near)} m`, 12, 88); pip.ltex.needsUpdate = true; }
+    if (pip.n++ % 2) return;
+    const bv = battle.visible, kv = bunker.visible, xrOn = renderer.xr.enabled, hid = threats.filter((T) => T.g.visible);
+    battle.visible = bunker.visible = pip.light.visible = pip.you.root.visible = true; pip.guards.forEach((G) => (G.g.visible = true)); hid.forEach((T) => (T.g.visible = false));
+    pip.you.pose(t, 1);
+    renderer.xr.enabled = false; const old = renderer.getRenderTarget(); renderer.setRenderTarget(pip.rt); renderer.clear(); renderer.render(battle, pip.cam); renderer.setRenderTarget(old); renderer.xr.enabled = xrOn;
+    battle.visible = bv; bunker.visible = kv; pip.light.visible = pip.you.root.visible = false; pip.guards.forEach((G) => (G.g.visible = false)); hid.forEach((T) => (T.g.visible = true));
+  }
   function makePcGloves() { pcGloves = [-1, 1].map((sd) => { const g = chromeGlove(); g.scale.setScalar(1.1); g.rotation.set(-1.2, sd * 0.2, sd * 0.3); g.visible = false; camera.add(g); g.userData.sd = sd; return g; }); }
   // ---- the security program: a giant head that assembles itself out of towers
   const BOSS_N = 96, BS = 1.7;
@@ -3906,15 +3955,15 @@
       init() {
         setEnv("sysop"); sysopGroup.visible = true; faceMesh.visible = faceFrame.visible = true; rig.position.set(0, 0, 0); A.x = 0; A.y = 1.6; A.z = 0;
         Object.assign(R, { stage: "crush", crush: 0, trace: 100, screamT: rand(5, 7), scream: 0, placed: false, grabs: new Map(), endT: 0 });
-        if (!pcGloves) makePcGloves();
+        if (!pcGloves) makePcGloves(); if (!pip) makePip(); pip.panel.visible = true; R.traceSaid = 0;
         if (handDots.parent !== runScene) runScene.add(handDots); handDots.material.color.set(0xffffff);
         showMsg("THE SYSOP", renderer.xr.isPresenting ? "reach in with both hands and squeeze" : "hold the mouse on its face to crush it", COL.cyan, 4); Sound.say("threat");
       },
       objective() {
-        if (R.stage === "crush") return { label: `Trace ${Math.ceil(R.trace)}%`, text: `Crush the sysop's deck · ${Math.floor(R.crush * 100)}%`, prog: R.crush };
+        if (R.stage === "crush") return { label: `Guards closing on your body · ${Math.ceil(R.trace)}%`, text: `Crush the sysop's deck · ${Math.floor(R.crush * 100)}%`, prog: R.crush };
         return { label: "Self-destruct", text: "Authorised · jack out", prog: 1 };
       },
-      onRespawn() { R.crush = 0; R.trace = 100; R.screamT = rand(5, 7); },
+      onRespawn() { R.crush = 0; R.trace = 100; R.traceSaid = 0; R.screamT = rand(5, 7); },
       update(dt, t) {
         R.speed = 0; construct.root.visible = false; updateTrails(false); keyLight.position.set(0, 2.5, 0.5);
         const xr = renderer.xr.isPresenting, live = alive();
@@ -3922,7 +3971,10 @@
         if (!xr) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); }
         let grip = 0;
         if (R.stage === "crush" && live) {
-          R.trace -= dt * 1.1; if (R.trace <= 0) { R.trace = 0; killNow("shatter"); }
+          R.trace -= dt * 2; // the guards are on their way to your body: about 50 s
+          if (R.trace < 50 && R.traceSaid < 1) { R.traceSaid = 1; Sound.say("danger"); showMsg("THEY'RE IN THE CORRIDORS", "the guards are coming for your body", COL.alarm, 2); }
+          if (R.trace < 20 && R.traceSaid < 2) { R.traceSaid = 2; Sound.say("threat"); showMsg("THEY'RE AT THE DOOR", "crush it now", COL.alarm, 1.6); }
+          if (R.trace <= 0) { R.trace = 0; killNow("shatter"); Sound.rifle(); showMsg("THEY FOUND YOUR BODY", "", COL.alarm, 2.5); }
           for (const P of UPLINK.pointers.call(this)) { // each hand (or trigger, or the mouse) squeezing the face counts
             if (!P.pressed) continue;
             const on = P.hand ? (() => { const l = sysopGroup.worldToLocal(P.point.clone()); return Math.abs(l.x) < FW * 0.75 && Math.abs(l.y) < FH * 0.7 && l.z < 0.9; })() : P.ray.intersectObject(faceMesh, false).length > 0;
@@ -3947,6 +3999,7 @@
         faceMesh.position.set(Math.sin(t * 23) * 0.01 * (grip > 0 ? 1 : 0), 0, 0); faceFrame.rotation.z = Math.sin(t * 17) * 0.01 * R.crush;
         if (pcGloves) pcGloves.forEach((g) => { const k = grip > 0 && !xr ? 1 : 0; g.visible = !xr && R.stage === "crush"; g.userData.k = lerp(g.userData.k || 0, k, Math.min(1, dt * 8)); const kk = g.userData.k; g.position.set(g.userData.sd * lerp(0.24, 0.13, kk), lerp(-0.22, -0.08, kk), lerp(-0.42, -0.8, kk)); });
         updateHandProps(xr && R.stage === "crush", true);
+        if (pip) { pip.panel.visible = R.stage === "crush"; if (R.stage === "crush") pipStep(t, dt, xr); }
       },
     },
   ];
