@@ -584,33 +584,36 @@
   // the gauntlet: a corridor of spikes from floor and ceiling, with keyhole walls to squeeze through
   const CEIL = 13.3, CW = 11;
   const corMat = shader({ ...U, uRed: { value: 0 } }, `uniform float uRed;
-    void main(){
+    void main(){ // a dark circuit board: traces, chips and pads, with bright green rings every 14 m (Lawnmower Man's Cyberspace game)
       bool isFlat = abs(vWorld.y - ${(CEIL / 2).toFixed(2)}) > ${(CEIL / 2 - 0.05).toFixed(2)};
       vec2 c = isFlat ? vWorld.xz : vWorld.zy;
-      float minor = gridL(c / 2.2), major = gridL(c / 11.0);
-      float check = mod(floor(c.x / 4.4) + floor(c.y / 4.4), 2.0);
-      float pulse = smoothstep(0.92, 1.0, fract(-vWorld.z / 70.0 - uTime * 0.45));
-      vec3 base = isFlat ? (vWorld.y < 1.0 ? vec3(0.42, 0.25, 1.0) : vec3(1.0, 0.28, 0.83)) : vec3(0.21, 0.9, 1.0);
-      vec3 col = base * (0.035 + check * 0.05 + minor * 0.28 + major * 0.75 + pulse * minor * 1.4);
-      col = mix(col, vec3(1.0, 0.1, 0.2) * (0.1 + major * 0.8), uRed);
+      vec2 cell = floor(c / 0.8), f = fract(c / 0.8); float h = hash(cell), h2 = hash(cell + 17.3);
+      float trace = h < 0.5 ? smoothstep(0.09, 0.0, abs(f.y - 0.5)) : smoothstep(0.09, 0.0, abs(f.x - 0.5));
+      float chip = step(0.84, h2) * step(0.18, f.x) * step(f.x, 0.82) * step(0.25, f.y) * step(f.y, 0.75);
+      float pad = step(0.9, hash(cell + 5.1)) * smoothstep(0.24, 0.12, length(f - 0.5)), block = step(0.7, hash(floor(c / 3.2)));
+      vec3 col = vec3(0.04, 0.06, 0.06) + vec3(0.03, 0.04, 0.04) * block + vec3(0.15, 0.21, 0.19) * trace + vec3(0.22, 0.26, 0.24) * chip + vec3(0.32, 0.38, 0.35) * pad;
+      float ring = smoothstep(0.035, 0.015, abs(fract(vWorld.z / 14.0) - 0.5));
+      col = mix(col, vec3(0.12, 0.85, 0.3) * (isFlat ? 0.8 : 1.0), ring);
+      col = mix(col, vec3(1.0, 0.1, 0.2) * (0.1 + trace * 0.6), uRed);
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
     }`, { side: THREE.BackSide });
   const corridor = new THREE.Mesh(new THREE.BoxGeometry(CW * 2, CEIL, 800), corMat);
   corridor.frustumCulled = false; corridor.visible = false; runScene.add(corridor);
-  const spikeGeo = new THREE.ConeGeometry(1, 1, 5, 1); spikeGeo.translate(0, 0.5, 0);
-  const spikeMat = shader({ ...U }, `void main(){
+  const spikeGeo = new THREE.ConeGeometry(1, 1, 3, 1); spikeGeo.translate(0, 0.5, 0);
+  const SILVER_FS = `void main(){ // riveted silver plate
       vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
-      float lit = 0.25 + 0.75 * abs(dot(n, normalize(vec3(0.5, 0.7, 0.45))));
-      float f = fract(vUv.x * 5.0); float edge = 1.0 - smoothstep(0.0, fwidth(vUv.x * 5.0) * 1.8, min(f, 1.0 - f));
-      float tip = pow(vUv.y, 6.0);
-      vec3 col = vCol * (0.12 + lit * 0.55) + vCol * edge * 1.1 + vec3(1.0, 0.95, 0.9) * tip * 1.4;
+      float l = 0.3 + 0.7 * abs(dot(n, normalize(vec3(0.4, 0.7, 0.5)))), spec = pow(abs(dot(n, normalize(vec3(-0.3, 0.5, 0.8)))), 14.0);
+      vec2 p = vWorld.xy * 1.2 + vWorld.zz * 0.7; float seam = gridL(p), rivet = smoothstep(0.1, 0.05, length(fract(p * 3.0) - 0.5)) * step(0.5, fract(p.x * 1.5));
+      vec3 col = mix(vec3(0.36, 0.4, 0.45), vec3(0.86, 0.9, 0.95), l) * vCol * (1.0 - seam * 0.45 - rivet * 0.25) + vec3(0.9) * spec * 0.6;
+      col = mix(col, vec3(1.0, 0.78, 0.25), smoothstep(0.88, 0.97, vUv.y) * step(0.01, vUv.y)); // a gold point
       gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 1.0);
-    }`);
+    }`;
+  const spikeMat = shader({ ...U }, SILVER_FS);
   const SPN = 520;
   const spikeMesh = new THREE.InstancedMesh(spikeGeo, spikeMat, SPN); spikeMesh.frustumCulled = false; spikeMesh.visible = false; runScene.add(spikeMesh);
   spikeMesh.setColorAt(0, new C3(1, 1, 1));
   const spikes = Array.from({ length: SPN }, () => ({ on: false, x: 0, z: 0, r: 1, h: 1, cur: 1, top: false, piston: false, fired: false, rise: 60 }));
-  const SPK_COL = [new C3(0x7a5cff), new C3(0x35e6ff), new C3(0xff47d4), new C3(0xff3a20)];
+  const SPK_COL = [new C3(0xffffff), new C3(0xdfe8ff), new C3(0xf0f0f4), new C3(0xff4a3a)]; // silver; pistons red
   function spawnSpike(x, z, r, h, top, piston) {
     const i = spikes.findIndex((s) => !s.on); if (i < 0) return;
     Object.assign(spikes[i], { on: true, x, z, r, h, top, piston, fired: false, cur: 0.02, rise: piston ? rand(24, 34) : rand(70, 120) });
@@ -633,19 +636,45 @@
     return sy < 0 && sy > -KB + m && Math.abs(sx) < slotW(sy, 0) - m;
   }
   const keyWallMat = shader({ ...U, uColor: { value: new C3(0x7a5cff) }, uNear: { value: 0 } }, `uniform vec3 uColor; uniform float uNear;
-    void main(){
-      float line = gridL(vWorld.xy * 1.3);
-      float scan = smoothstep(0.85, 1.0, sin(vWorld.y * 2.5 - uTime * 6.0)) * 0.5;
-      float fo = fogF(vWorld);
-      gl_FragColor = vec4(uColor * (0.3 + line * 1.0 + scan) + vec3(0.6, 0.3, 1.0) * uNear * line, (0.42 + line * 0.5 + scan * 0.2) * (1.0 - fo));
+    void main(){ // a silver riveted plate (you can see a little way through it)
+      vec2 p = vWorld.xy * 0.9; float seam = gridL(p), rivet = smoothstep(0.08, 0.04, length(fract(p * 4.0) - 0.5)) * step(0.75, fract(p.x));
+      float sheen = 0.55 + 0.45 * sin(vWorld.x * 0.4 + vWorld.y * 0.3 + uTime * 0.6);
+      vec3 col = mix(vec3(0.32, 0.36, 0.42), vec3(0.72, 0.76, 0.82), sheen) * (1.0 - seam * 0.5 - rivet * 0.3) + vec3(1.0, 0.35, 0.1) * uNear * seam;
+      gl_FragColor = vec4(mix(col, uFogColor, fogF(vWorld)), 0.86 * (1.0 - fogF(vWorld)));
     }`, { transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const keyRimMat = new THREE.MeshBasicMaterial({ color: 0xffc24a, side: THREE.DoubleSide });
+  const keyRimMat = new THREE.MeshBasicMaterial({ color: 0xff4a1a, side: THREE.DoubleSide });
   const keyWallGeo = (() => { const sh = new THREE.Shape(); sh.absarc(0, 0, 30, 0, TAU, false); sh.holes.push(new THREE.Path(keyPts(0).reverse())); const g = new THREE.ShapeGeometry(sh, 48); g.translate(0, -KPIV, 0); return g; })();
   const keyRimGeo = (() => { const sh = new THREE.Shape(keyPts(0.16)); sh.holes.push(new THREE.Path(keyPts(0).reverse())); const g = new THREE.ShapeGeometry(sh, 24); g.translate(0, -KPIV, 0); return g; })();
   // the construct's span (and roll) shown as a bar in front of you; green when it would fit the next keyhole
   const spanMat = new THREE.MeshBasicMaterial({ color: 0xffc24a, transparent: true, opacity: 0.85, blending: ADD, depthWrite: false });
   const spanBar = new THREE.Mesh(new THREE.BoxGeometry(HB * 2, 0.06, 0.06), spanMat); spanBar.visible = false; runScene.add(spanBar);
   [-1, 1].forEach((e) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.32, 0.06), spanMat); m.position.x = e * HB; spanBar.add(m); });
+  // spiked silver dodecahedra drifting in the corridor (the film's data mines): they hurt, and you can shoot them
+  const DDN = 26, PHI = (1 + Math.sqrt(5)) / 2;
+  const DDIR = [[0, 1, PHI], [0, 1, -PHI], [0, -1, PHI], [0, -1, -PHI], [1, PHI, 0], [1, -PHI, 0], [-1, PHI, 0], [-1, -PHI, 0], [PHI, 0, 1], [PHI, 0, -1], [-PHI, 0, 1], [-PHI, 0, -1]].map(([x, y, z]) => new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), new V3(x, y, z).normalize()));
+  const dodecGeo = new THREE.DodecahedronGeometry(1.1, 0), dodecSpikeGeo = new THREE.ConeGeometry(0.09, 0.75, 4); dodecSpikeGeo.translate(0, 1.25, 0);
+  const dodecMesh = new THREE.InstancedMesh(dodecGeo, shader({ ...U }, SILVER_FS), DDN), dodecSpikes = new THREE.InstancedMesh(dodecSpikeGeo, new THREE.MeshBasicMaterial({ color: 0xffc24a }), DDN * 12);
+  [dodecMesh, dodecSpikes].forEach((m) => { m.frustumCulled = false; m.visible = false; runScene.add(m); });
+  const dodecs = Array.from({ length: DDN }, () => ({ on: false, x: 0, y: 0, z: 0, q: new THREE.Quaternion(), spin: new V3() }));
+  function spawnDodec(x, y, z) { const d = dodecs.find((q) => !q.on); if (!d) return; Object.assign(d, { on: true, x, y, z }); d.q.setFromEuler(new THREE.Euler(rand(0, 3), rand(0, 3), 0)); d.spin.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)); }
+  const dqa = new THREE.Quaternion();
+  function updateDodecs(dt, t, RZ, live) {
+    for (let i = 0; i < DDN; i++) {
+      const d = dodecs[i];
+      if (d.on && d.z > RZ + 8) d.on = false;
+      if (d.on) {
+        dqa.setFromEuler(new THREE.Euler(d.spin.x * dt, d.spin.y * dt, d.spin.z * dt)); d.q.multiply(dqa);
+        const y = d.y + Math.sin(t * 1.3 + i) * 0.3;
+        if (live && Math.hypot(A.x - d.x, A.y - y, A.z - d.z) < 1.7) { d.on = false; shatterCube(d.x, y, d.z, C_WHITE, 14, R.speed * 0.5); Sound.glass(); if (R.godT <= 0) damage(25, "DATA MINE", A.x, A.y, A.z); }
+        else if (d.z < A.z) addT(d.x, y, d.z, 1.4, false, () => { if (!d.on) return; d.on = false; shatterCube(d.x, y, d.z, C_WHITE, 14); Sound.glass(); R.data += 3; R.god = Math.min(100, R.god + 4); });
+        dummy.position.set(d.x, y, d.z); dummy.quaternion.copy(d.q); dummy.scale.setScalar(1);
+      } else { dummy.position.set(0, -999, 0); dummy.scale.setScalar(0); }
+      dummy.updateMatrix(); dodecMesh.setMatrixAt(i, dummy.matrix);
+      for (let k = 0; k < 12; k++) { if (d.on) dummy.quaternion.copy(d.q).multiply(DDIR[k]); dummy.updateMatrix(); dodecSpikes.setMatrixAt(i * 12 + k, dummy.matrix); }
+    }
+    dummy.quaternion.identity(); dummy.scale.setScalar(1);
+    dodecMesh.instanceMatrix.needsUpdate = dodecSpikes.instanceMatrix.needsUpdate = true;
+  }
   const keyWalls = [0, 1, 2].map(() => {
     const g = new THREE.Group(); g.visible = false; runScene.add(g);
     const wall = new THREE.Mesh(keyWallGeo, keyWallMat); wall.frustumCulled = false;
@@ -1721,6 +1750,17 @@
     else { visorCv.width = innerWidth; visorCv.height = innerHeight; draw(visorCv.getContext("2d"), innerWidth, innerHeight, innerHeight - Math.max(150, innerHeight * 0.2), false); }
   }
   function updateVisor(on, n = 0, integ = 100) { overlay(on, `v${Math.min(n, 6)}|${Math.ceil(integ / 12.5)}`, (g, W, H, low, xr) => drawVisor(g, W, H, n, integ, low, xr)); }
+  function drawFlightHud(g, W, H, low, xr, score, integ, lives) { // after The Lawnmower Man's Cyberspace game
+    g.clearRect(0, 0, W, H); const inset = xr ? 0.22 : 0.06, x0 = W * inset, x1 = W * (1 - inset), yb = xr ? H * 0.8 : low;
+    g.strokeStyle = "rgba(200,220,255,0.28)"; g.lineWidth = 1.5; const cw = xr ? W * 0.28 : W * 0.5, ch = xr ? H * 0.3 : H * 0.5;
+    g.beginPath(); g.moveTo(W / 2 - cw, H / 2); g.lineTo(W / 2 + cw, H / 2); g.moveTo(W / 2, H / 2 - ch); g.lineTo(W / 2, H / 2 + ch); g.stroke();
+    const fs = Math.round(H * (xr ? 0.07 : 0.07)); g.font = `${fs}px 'Archivo Black', 'Arial Black', sans-serif`; g.textAlign = "right"; g.lineWidth = 3; g.strokeStyle = "rgba(0,20,15,0.8)";
+    const sc = String(score).padStart(5, "0"); g.strokeText(sc, x1, H * (xr ? 0.3 : 0.1)); g.fillStyle = "#3fd8a0"; g.fillText(sc, x1, H * (xr ? 0.3 : 0.1));
+    const n = Math.ceil(integ / 6.25), top = H * (xr ? 0.3 : 0.2), stepY = ((yb - top) / 16) | 0, cwid = Math.min(W * 0.03, 30); // gold chevrons, lit from the bottom
+    for (let i = 0; i < 16; i++) { const y = yb - (i + 1) * stepY; g.strokeStyle = i < n ? "#e8b030" : "rgba(232,176,48,0.18)"; g.lineWidth = Math.max(3, stepY * 0.28); g.beginPath(); g.moveTo(x0, y + stepY * 0.6); g.lineTo(x0 + cwid / 2, y + stepY * 0.1); g.lineTo(x0 + cwid, y + stepY * 0.6); g.stroke(); }
+    for (const sd of [-1, 1]) { const bx = sd < 0 ? x0 + W * 0.04 : x1 - W * 0.04; g.fillStyle = "rgba(60,40,150,0.85)"; g.beginPath(); g.moveTo(bx - sd * W * 0.06, yb + H * 0.06); g.lineTo(bx + sd * W * 0.05, yb - H * 0.02); g.lineTo(bx + sd * W * 0.07, yb + H * 0.06); g.closePath(); g.fill(); }
+    for (let i = 0; i < Math.max(0, lives); i++) { const ax = x1 - W * 0.02, ay = yb - H * 0.05 - i * H * 0.045, u = H * 0.018; g.fillStyle = "#e050d8"; g.beginPath(); g.moveTo(ax, ay - u); g.lineTo(ax + u, ay + u * 0.6); g.lineTo(ax, ay + u * 0.1); g.lineTo(ax - u, ay + u * 0.6); g.closePath(); g.fill(); }
+  }
   function drawKeypad(g, W, H, low, num, done, xr) { // Johnny's ENTRY CODE pad: the digits dialled so far, the next key lit
     g.clearRect(0, 0, W, H); const u = Math.min(W, H) * 0.045, x0 = W * (xr ? 0.24 : 0.05), y0 = (xr ? H * 0.78 : low) - u * 5.6;
     g.textAlign = "left"; g.fillStyle = "#e8f4ff"; g.shadowColor = "#4a9aff"; g.shadowBlur = 10; g.font = `bold ${Math.round(u * 0.62)}px 'Archivo Black', 'Arial Black', sans-serif`; g.fillText("ENTRY CODE", x0, y0 - u * 1.4);
@@ -2074,13 +2114,13 @@
     poly: { fog: 0x000000, dens: 0.006, a: 0xb18cff, b: 0x35e6ff, world: false },
     uplink: { fog: 0x1c0c03, dens: 0.03, a: 0xffa040, b: 0xd06010, world: false },
     battle: { fog: 0x3a1a08, dens: 0.0085, a: 0x2f8f4a, b: 0x9fff9a, world: false },
-    gauntlet: { fog: 0x07021a, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
+    gauntlet: { fog: 0x030806, dens: 0.0105, a: 0x7a5cff, b: 0x35e6ff, world: false },
   };
   function setEnv(name) {
     const e = ENVS[name];
     floor.visible = towers.visible = landmarks.visible = streaks.visible = e.world;
     tunnel.visible = name === "tunnel"; cage.visible = name === "cage"; polyGroup.visible = name === "poly";
-    corridor.visible = spikeMesh.visible = name === "gauntlet";
+    corridor.visible = spikeMesh.visible = dodecMesh.visible = dodecSpikes.visible = name === "gauntlet";
     battle.visible = name === "battle"; uplink.visible = name === "uplink";
     sky.material.uniforms.uBand.value = name === "battle" ? 1 : 0; mountains.visible = name === "battle";
     R.fogBase.set(e.fog); R.floorA.set(e.a); R.floorB.set(e.b);
@@ -3017,7 +3057,7 @@
       init() {
         setEnv("gauntlet");
         R.lx = 0; R.ly = 4; R.ltx = 0; R.lty = 5; R.nRow = -50; R.rowsLeft = 14; R.kSpawned = 0; R.keysPassed = 0; R.keys = 0;
-        R.stage = "run"; R.shunkT = 0; R.lastWallZ = 0; R.roll = 0; spanBar.visible = true;
+        R.stage = "run"; R.shunkT = 0; R.lastWallZ = 0; R.roll = 0; spanBar.visible = true; dodecs.forEach((d) => (d.on = false));
         showMsg("THE GAUNTLET", renderer.xr.isPresenting ? "right stick rolls · turn the bar green to fit each keyhole" : "Q / E roll · turn the bar green to fit each keyhole", COL.violet, 4);
       },
       objective() {
@@ -3052,6 +3092,9 @@
         for (let i = 0; i < nf; i++) add(false);
         for (let i = 0; i < nc; i++) add(true);
         if (Math.random() < 0.5) spawnPacket(R.lx, R.ly, z - 2.75, 0);
+        if (k > 0.1 && Math.random() < 0.15 + k * 0.25) { // a data mine, never in the safe lane
+          for (let tries = 0; tries < 6; tries++) { const x = rand(-CW + 2, CW - 2), y = rand(2, CEIL - 2); if (Math.hypot(x - R.lx, y - R.ly) > 4.2) { spawnDodec(x, y, z - 2.75); break; } }
+        }
         if (Math.random() < (R.integrity < 60 ? 0.05 : 0.015)) spawnPacket(R.lx, R.ly, z - 2.75, 1);
       },
       spawnKeyWall(z) {
@@ -3111,6 +3154,10 @@
         }
         dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1);
         spikeMesh.instanceMatrix.needsUpdate = true;
+        updateDodecs(dt, t, RZ, live);
+        // the film's flight HUD: score top right, a gold chevron gauge, crosshair lines, purple wings with your lives
+        const score = Math.floor(R.data * 50 + R.keys * 1000);
+        overlay(live && !R.over, `f${score}|${Math.ceil(R.integrity / 6.25)}|${R.lives}`, (g, W, H, low, xr) => drawFlightHud(g, W, H, low, xr, score, R.integrity, R.lives));
         // keyhole walls
         let near = 0;
         for (const w of keyWalls) {
@@ -3135,7 +3182,7 @@
         spanBar.visible = alive() && !R.demo;
         spanBar.position.set(A.x, A.y, A.z - (isFirst() ? 3 : 1.3)); spanBar.rotation.z = R.roll;
         spanMat.color.set(nw && A.z - nw.z < 120 ? (this.fits(nw) ? 0x5dffb0 : 0xff47d4) : 0xffc24a);
-        keyRimMat.color.setHSL(0.12, 1, 0.55 + 0.25 * near * (0.5 + 0.5 * Math.sin(t * 14)));
+        keyRimMat.color.setHSL(0.04, 1, 0.5 + 0.25 * near * (0.5 + 0.5 * Math.sin(t * 14)));
         if (R.stage === "run" && !R.demo && live && msgTimer <= 0) { const w = keyWalls.find((w) => w.on && !w.passed && A.z - w.z < 80 && A.z - w.z > 0); if (w) showMsg("KEYHOLE AHEAD", w.mode === 2 ? "it's spinning · roll with it" : w.mode === 1 ? "it's swinging · time it" : "roll to fit · turn the bar green", COL.violet, 0.9); }
         if (R.stage === "exit") {
           const k = clamp(1 - (A.z - R.zE) / 160, 0, 1); if (live) { A.x = lerp(A.x, 0, dt * k * 2.5); A.y = lerp(A.y, 6, dt * k * 2.5); }
@@ -3950,7 +3997,7 @@
     start(i) { Sound.start(); S.started = true; $("splash").hidden = true; startLevel(i); return this.state(); },
     key: K, ptr: Ptr, mouse,
     state() { return R ? { mode: S.mode, id: R.id, stage: R.stage, t: +R.time.toFixed(2), z: +A.z.toFixed(1), x: +A.x.toFixed(2), y: +A.y.toFixed(2), data: R.data, integ: R.integrity, lives: R.lives, over: R.over, kills: R.kills, obj: R.L.objective && R.L.objective().text } : { mode: S.mode }; },
-    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
+    R: () => R, cheat(f) { f({ R, A, B, pk, ice, ships, recs, walls, gates, lockRings, echoNodes, pve, keyWalls, spikes, BMAP, bcell, bsolid, JACK, tripwires, spaceLaser, threats, mines, btShips, powerUps, keyDigits, friendlies, pieces, pyrRoot, dodecs, renderer, Sound, SELF, pcGun, BT, camera, LEVELS, levelComplete, killNow, damage }); return this.state(); },
   };
 })();
 </script>
