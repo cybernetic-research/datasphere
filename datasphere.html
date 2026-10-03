@@ -2898,7 +2898,7 @@
         if (R.stage === "open") return { label: `Threats ${left}`, text: "Bunker open · get inside", prog };
         if (R.stage === "inside") return { label: R.alarm > 0 ? "ALARM · guards alerted" : "Uplink bunker", text: `Reach the mainframe room and jack in · ${Math.round(Math.hypot(A.x - JACK.x, A.z - JACK.z))} m`, prog: 1 - clamp((A.z - JACK.z) / (BT.bz - JACK.z), 0, 1) };
         if (R.stage === "escape") return { label: `SELF-DESTRUCT ${fmtTime(Math.ceil(SELF.t || 0))}`, text: "Get out of the bunker", prog: clamp((A.z - JACK.z) / (BT.bz - JACK.z), 0, 1) };
-        if (R.stage === "out") return { label: `SELF-DESTRUCT ${fmtTime(Math.ceil(SELF.t || 0))}`, text: R.atHome ? "You're clear · watch the uplink go" : `Run home before it blows · ${Math.max(0, Math.round(R.homeZ - A.z))} m`, prog: clamp((A.z - BT.bz) / 60, 0, 1) };
+        if (R.stage === "out") return { label: `SELF-DESTRUCT ${fmtTime(Math.ceil(SELF.t || 0))}`, text: R.atHome ? "You're clear · watch the uplink go" : `Run home before it blows · ${Math.max(0, Math.round(R.homeZ - A.z))} m${Math.hypot(A.x, A.z - (BT.bz - (BROWS * BC) / 2)) < 250 ? " · inside the blast radius" : ""}`, prog: clamp((A.z - BT.bz) / 60, 0, 1) };
         if (R.stage === "home") return { label: `Freed ${R.freed}`, text: `Run home to our lines · ${Math.max(0, Math.round(R.homeZ - A.z))} m`, prog: clamp((A.z - BT.bz) / (R.homeZ - BT.bz), 0, 1) };
         if (R.stage === "done") return { label: "Home", text: "Mission complete", prog: 1 };
         return { label: "Bunker", text: "Jacking in…", prog: 1 };
@@ -2941,9 +2941,10 @@
         Sound.mega(); pulse(1, 700); R.flash = 1;
         SELF.t = null; shock.visible = true; shock.userData.t = 0; shock.position.set(c.x, 0.5, c.z);
         const far = Math.hypot(A.x - c.x, A.z - c.z);
-        if (alive() && far < 250) killNow("burn"); // caught in the blast
+        const caught = alive() && far < 250; // caught in the blast: no spare jack survives that, it's game over whatever lives are left
+        if (caught) { R.lives = 1; R.inv = 0; R.godT = 0; killNow("burn"); }
         R.chain = [0.4, 0.7, 1.0, 1.3, 1.6, 2.0, 2.4, 2.9, 3.4, 4.0, 4.7, 5.5, 6.4]; R.chainT = 0; R.chainC = c.clone(); Sound.rumble(1);
-        R.stage = "home"; showMsg("BUNKER DESTROYED", R.atHome || R.cine ? "the uplink is gone" : far < 250 ? "caught in the blast" : "keep running · our lines are at the green beam", COL.heal, 3.5);
+        R.stage = "home"; if (caught) showMsg("CAUGHT IN THE BLAST", "nothing survives that · game over", COL.alarm, 7); else showMsg("BUNKER DESTROYED", R.atHome || R.cine ? "the uplink is gone" : "keep running · our lines are at the green beam", COL.heal, 3.5);
       },
       cineView(xr) { // up on a rise along the field, looking back at the bunker; in the headset it's a cut to a still viewpoint, no camera moves
         const Cn = R.cine, c = Cn.c, k = smooth01(Cn.t / 10), bt = Cn.blowAt === undefined ? -1 : Cn.t - Cn.blowAt;
